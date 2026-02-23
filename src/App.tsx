@@ -1,13 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots } from './lib/db';
 import {
-  User, Check, AlertCircle, Loader2, Music, Users,
-  ChevronRight, LayoutDashboard, Search, Filter,
-  Download, Settings, Info, TrendingUp, PieChart,
-  ArrowRight, LogOut, Grid, Calendar, Clock, RotateCcw,
+  Check, Loader2, Music,
+  ChevronRight, Search, Download, Settings, Grid,
   ChevronDown
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
@@ -21,25 +19,9 @@ const VOICE_PARTS = ['Soprano', 'Alto', 'Tenor', 'Bass'];
 
 // --- Components ---
 
-function SetupGuide() {
-  return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#0b0d17] text-white p-6 font-sans">
-      <div className="max-w-md w-full glass p-8 rounded-[2rem] border border-white/5 shadow-2xl">
-        <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-indigo-500/20">
-          <Settings className="text-white" size={32} />
-        </div>
-        <h2 className="text-2xl font-bold mb-4">Database Connection Required</h2>
-        <p className="text-slate-400 mb-8 leading-relaxed text-sm">
-          Please connect your Supabase project. The schema is available in <code className="text-indigo-400 bg-white/5 px-1.5 py-0.5 rounded">supabase_schema.sql</code>.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // --- Shared Layout ---
 
-function Layout({ children, title, subtitle }: any) {
+function Layout({ children, subtitle }: any) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -101,7 +83,6 @@ function PublicView() {
   const [fullName, setFullName] = useState('');
   const [voicePart, setVoicePart] = useState('Tenor');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   const fetchData = async () => {
@@ -110,7 +91,7 @@ function PublicView() {
       if (configs.max_slots) setMaxSlots(parseInt(configs.max_slots));
       setRegistrations(regs);
     } catch (err) {
-      setError('Connection Error');
+      console.error('Connection Error:', err);
     } finally {
       setLoading(false);
     }
@@ -132,7 +113,6 @@ function PublicView() {
     e.preventDefault();
     if (!selectedSlot || !fullName.trim() || !voicePart || !isSupabaseConfigured) return;
     setSubmitting(true);
-    setError(null);
     try {
       await registerSoloist(fullName, voicePart, selectedSlot);
       setSuccess(true);
@@ -143,7 +123,7 @@ function PublicView() {
         setVoicePart('');
       }, 3000);
     } catch (err: any) {
-      setError('Failed to sync with server.');
+      console.error('Failed to sync with server:', err);
     } finally {
       setSubmitting(false);
     }
@@ -361,18 +341,6 @@ function PublicView() {
                         {submitting ? <Loader2 size={24} className="animate-spin" /> : null}
                         {submitting ? 'Processing...' : 'Reserve Now'}
                       </button>
-
-                      {error && (
-                        <div className="p-5 bg-[#3B2824] border border-[#4A322C] rounded-[1rem] flex flex-col gap-3 shadow-inner">
-                          <div className="flex items-center gap-3 text-[#E6A96C] font-bold text-sm">
-                            <AlertCircle size={18} /> Connection Issue
-                          </div>
-                          <p className="text-[13px] text-slate-300 leading-relaxed font-medium">We couldn't sync with the server.</p>
-                          <div className="flex justify-center mt-2">
-                            <button type="button" onClick={fetchData} className="px-6 py-2 bg-[#422C28] border border-white/5 rounded-xl text-xs font-semibold text-[#D8B6AF] transition-all hover:bg-white/5 active:scale-95">Retry</button>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </form>
                 </motion.div>
