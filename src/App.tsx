@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots } from './lib/db';
 import {
-  Check, Loader2, Music,
+  Check, Loader2, Music, X,
   ChevronRight, Search, Download, Settings, Grid,
   ChevronDown
 } from 'lucide-react';
@@ -79,9 +79,9 @@ function PublicView() {
   const [maxSlots, setMaxSlots] = useState(50);
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSlot, setSelectedSlot] = useState<number | null>(43); // Selected for demo default as image shows
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null); // Start empty
   const [fullName, setFullName] = useState('');
-  const [voicePart, setVoicePart] = useState('Tenor');
+  const [voicePart, setVoicePart] = useState(''); // No default voice part
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -250,111 +250,136 @@ function PublicView() {
           </div>
         </div>
 
-        {/* Sidebar Details / Form */}
-        <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-10">
-          <div className="glass p-8 rounded-[2.5rem] border-white/5 shadow-2xl relative overflow-hidden flex flex-col min-h-[500px]">
-            {/* Top right purple glow matching the image */}
-            <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-indigo-600/20 blur-[100px] rounded-full pointer-events-none" />
+        {/* Sidebar Details / Form (Modal on mobile) */}
+        <AnimatePresence>
+          {selectedSlot && (
+            <>
+              {/* Mobile overlay backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedSlot(null)}
+                className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] lg:hidden"
+              />
 
-            <h3 className="text-lg font-black text-white px-2 mb-6">Selected Slot</h3>
+              <motion.div
+                initial={{ opacity: 0, y: 50, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 50, scale: 0.95 }}
+                className="fixed lg:static top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 lg:translate-x-0 lg:translate-y-0 w-[90%] max-w-md lg:w-auto lg:max-w-none lg:col-span-4 z-[101] lg:z-10 bg-[#0b0d17] lg:bg-transparent rounded-[2.5rem]"
+              >
+                <div className="glass p-8 rounded-[2.5rem] border border-white/10 lg:border-white/5 shadow-[0_0_50px_rgba(0,0,0,0.8)] lg:shadow-2xl relative overflow-hidden flex flex-col min-h-[500px]">
+                  {/* Top right purple glow matching the image */}
+                  <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-indigo-600/20 blur-[100px] rounded-full pointer-events-none" />
 
-            <AnimatePresence mode="wait">
-              {success ? (
-                <motion.div
-                  key="success"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="p-8 bg-emerald-500/10 border border-emerald-500/20 rounded-[2rem] flex flex-col items-center text-center gap-4"
-                >
-                  <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center glow-emerald">
-                    <Check size={40} className="text-slate-950" />
-                  </div>
-                  <h4 className="text-xl font-black text-white uppercase italic">Reserved!</h4>
-                  <p className="text-xs text-slate-400">Your performance slot is confirmed.</p>
-                </motion.div>
-              ) : selectedSlot ? (
-                <motion.div
-                  key="form"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex flex-col flex-1"
-                >
-                  <div className="p-6 bg-[#131521] border border-white/5 rounded-[1.5rem] relative overflow-hidden group shadow-[0_8px_30px_rgba(0,0,0,0.5)] mb-8">
-                    <div className="flex items-center gap-5 relative z-10">
-                      <div className="w-14 h-14 bg-indigo-600/20 rounded-[1.1rem] flex items-center justify-center text-indigo-400 border border-indigo-500/30">
-                        <Grid size={24} />
-                      </div>
-                      <div className="flex flex-col">
-                        <h4 className="text-[28px] font-black text-white leading-none tracking-tight">S-{selectedSlot}</h4>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex items-center gap-1.5 ml-1 relative z-10">
-                      <div className="w-[18px] h-[18px] rounded-full flex items-center justify-center bg-emerald-500 shadow-lg shadow-emerald-500/30">
-                        <Check size={12} className="text-black" strokeWidth={3} />
-                      </div>
-                      <span className="text-[15px] font-medium text-slate-400 tracking-wide ml-1">Available</span>
-                    </div>
+                  <div className="flex justify-between items-center mb-6 px-2">
+                    <h3 className="text-lg font-black text-white">Selected Slot</h3>
+
+                    {/* Close button for mobile modal */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSlot(null)}
+                      className="lg:hidden p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                    >
+                      <X size={18} />
+                    </button>
                   </div>
 
-                  <form onSubmit={handleRegister} className="flex flex-col flex-1">
-                    <div className="space-y-4 mb-8">
-                      <h5 className="text-[14px] font-bold text-white mb-4">Performer Details</h5>
-                      <div className="space-y-6">
-                        <div className="space-y-2">
-                          <label className="text-[11px] font-medium text-slate-500 mb-1 block">Full Name</label>
-                          <input
-                            required
-                            value={fullName}
-                            onChange={e => setFullName(e.target.value)}
-                            placeholder="e.g. Samuel Adewale"
-                            className="w-full bg-[#131521] border border-white/5 rounded-xl px-5 py-3.5 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-medium"
-                          />
+                  <AnimatePresence mode="wait">
+                    {success ? (
+                      <motion.div
+                        key="success"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="p-8 bg-emerald-500/10 border border-emerald-500/20 rounded-[2rem] flex flex-col items-center text-center gap-4 my-auto"
+                      >
+                        <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center glow-emerald">
+                          <Check size={40} className="text-slate-950" />
                         </div>
-
-                        <div className="space-y-2">
-                          <label className="text-[11px] font-medium text-slate-500 mb-1 block">Voice Part</label>
-                          <div className="flex bg-[#131521] p-1.5 rounded-xl border border-white/5">
-                            {VOICE_PARTS.map(p => (
-                              <button
-                                key={p}
-                                type="button"
-                                onClick={() => setVoicePart(p)}
-                                className={cn(
-                                  "flex-1 py-2 rounded-lg text-xs font-medium transition-all",
-                                  voicePart === p ? "bg-indigo-600/90 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
-                                )}
-                              >
-                                {p}
-                              </button>
-                            ))}
+                        <h4 className="text-xl font-black text-white uppercase italic">Reserved!</h4>
+                        <p className="text-xs text-slate-400">Your performance slot is confirmed.</p>
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="form"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        className="flex flex-col flex-1"
+                      >
+                        <div className="p-6 bg-[#131521] border border-white/5 rounded-[1.5rem] relative overflow-hidden group shadow-[0_8px_30px_rgba(0,0,0,0.5)] mb-8">
+                          <div className="flex items-center gap-5 relative z-10">
+                            <div className="w-14 h-14 bg-indigo-600/20 rounded-[1.1rem] flex items-center justify-center text-indigo-400 border border-indigo-500/30">
+                              <Grid size={24} />
+                            </div>
+                            <div className="flex flex-col">
+                              <h4 className="text-[28px] font-black text-white leading-none tracking-tight">S-{selectedSlot}</h4>
+                            </div>
+                          </div>
+                          <div className="mt-4 flex items-center gap-1.5 ml-1 relative z-10">
+                            <div className="w-[18px] h-[18px] rounded-full flex items-center justify-center bg-emerald-500 shadow-lg shadow-emerald-500/30">
+                              <Check size={12} className="text-black" strokeWidth={3} />
+                            </div>
+                            <span className="text-[15px] font-medium text-slate-400 tracking-wide ml-1">Available</span>
                           </div>
                         </div>
-                      </div>
-                    </div>
 
-                    <div className="mt-auto pt-4 space-y-6">
-                      <button
-                        type="submit"
-                        disabled={submitting}
-                        className="w-full bg-gradient-to-b from-[#638F75] to-[#426150] text-[#E0EFE6] font-bold py-4 rounded-xl transition-all shadow-[0_8px_30px_rgba(66,97,80,0.4)] flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 text-[16px] border border-[#6F9E82]/50 hover:brightness-110"
-                      >
-                        {submitting ? <Loader2 size={24} className="animate-spin" /> : null}
-                        {submitting ? 'Processing...' : 'Reserve Now'}
-                      </button>
-                    </div>
-                  </form>
-                </motion.div>
-              ) : (
-                <div className="p-12 bg-white/5 border border-dashed border-white/10 rounded-[2.5rem] flex flex-col items-center justify-center text-center gap-6 mt-[20%]">
-                  <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center text-slate-700">
-                    <Grid size={32} />
-                  </div>
-                  <p className="text-sm text-slate-500 italic leading-relaxed">Select any available slot from the grid <br />to view details and register.</p>
+                        <form onSubmit={handleRegister} className="flex flex-col flex-1">
+                          <div className="space-y-4 mb-8">
+                            <h5 className="text-[14px] font-bold text-white mb-4">Performer Details</h5>
+                            <div className="space-y-6">
+                              <div className="space-y-2">
+                                <label className="text-[11px] font-medium text-slate-500 mb-1 block">Full Name</label>
+                                <input
+                                  required
+                                  value={fullName}
+                                  onChange={e => setFullName(e.target.value)}
+                                  placeholder="e.g. Samuel Adewale"
+                                  className="w-full bg-[#131521] border border-white/5 rounded-xl px-5 py-3.5 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-medium text-white"
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <label className="text-[11px] font-medium text-slate-500 mb-1 block">Voice Part</label>
+                                <div className="flex flex-wrap gap-2 lg:flex-nowrap bg-[#131521] p-1.5 rounded-xl border border-white/5">
+                                  {VOICE_PARTS.map(p => (
+                                    <button
+                                      key={p}
+                                      type="button"
+                                      onClick={() => setVoicePart(p)}
+                                      className={cn(
+                                        "flex-1 min-w-[60px] py-2 rounded-lg text-[11px] sm:text-xs font-medium transition-all",
+                                        voicePart === p ? "bg-indigo-600/90 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
+                                      )}
+                                    >
+                                      {p}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-auto pt-4 space-y-6">
+                            <button
+                              type="submit"
+                              disabled={submitting || !voicePart}
+                              className="w-full bg-gradient-to-b from-[#638F75] to-[#426150] text-[#E0EFE6] font-bold py-4 rounded-xl transition-all shadow-[0_8px_30px_rgba(66,97,80,0.4)] flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 text-[16px] border border-[#6F9E82]/50 hover:brightness-110"
+                            >
+                              {submitting ? <Loader2 size={24} className="animate-spin" /> : null}
+                              {submitting ? 'Processing...' : !voicePart ? 'Select Voice Part' : 'Reserve Now'}
+                            </button>
+                          </div>
+                        </form>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
     </Layout>
   );
