@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
-import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots } from './lib/db';
+import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration } from './lib/db';
 import {
-  Check, Loader2, Music, X,
+  Check, Loader2, Music, X, Edit2,
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid,
   ChevronDown
 } from 'lucide-react';
@@ -396,6 +396,10 @@ function AdminView() {
   const [voicePartFilter, setVoicePartFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editVoicePart, setEditVoicePart] = useState('');
+  const [savingId, setSavingId] = useState<number | null>(null);
 
   const fetchData = async () => {
     try {
@@ -430,6 +434,33 @@ function AdminView() {
 
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
   const paginatedData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const stats = {
+    total: registrations.length,
+    soprano: registrations.filter(r => r.voice_part === 'Soprano').length,
+    alto: registrations.filter(r => r.voice_part === 'Alto').length,
+    tenor: registrations.filter(r => r.voice_part === 'Tenor').length,
+    bass: registrations.filter(r => r.voice_part === 'Bass').length,
+  };
+
+  const handleEditClick = (r: any) => {
+    setEditingId(r.id);
+    setEditFullName(r.full_name);
+    setEditVoicePart(r.voice_part);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId) return;
+    setSavingId(editingId);
+    try {
+      await editRegistration(editingId, editFullName, editVoicePart);
+      setEditingId(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   const handleDownloadCSV = () => {
     if (registrations.length === 0) return;
@@ -498,6 +529,22 @@ function AdminView() {
             )}
           </div>
 
+          {/* Dashboard Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {[
+              { label: 'Total', count: stats.total, color: 'text-white', bg: 'bg-indigo-600/20', border: 'border-indigo-500/30' },
+              { label: 'Soprano', count: stats.soprano, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
+              { label: 'Alto', count: stats.alto, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+              { label: 'Tenor', count: stats.tenor, color: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20' },
+              { label: 'Bass', count: stats.bass, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }
+            ].map((s, i) => (
+              <div key={i} className={cn("p-4 rounded-3xl border flex flex-col justify-center items-center gap-1", s.bg, s.border)}>
+                <span className={cn("text-2xl font-black", s.color)}>{s.count}</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{s.label}</span>
+              </div>
+            ))}
+          </div>
+
           {activeTab === 'list' ? (
             <div className="overflow-x-auto rounded-3xl border border-white/5">
               <table className="w-full text-left">
@@ -507,6 +554,7 @@ function AdminView() {
                     <th className="px-8 py-5">Full Name</th>
                     <th className="px-8 py-5">Voice Part</th>
                     <th className="px-8 py-5 text-right">Registration Date</th>
+                    <th className="px-8 py-5 text-center w-24">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -517,26 +565,62 @@ function AdminView() {
                           S-{r.slot_id}
                         </div>
                       </td>
-                      <td className="px-8 py-5 font-bold text-slate-200">{r.full_name}</td>
                       <td className="px-8 py-5">
-                        <span className={cn(
-                          "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest",
-                          r.voice_part === 'Soprano' && "bg-rose-500/10 text-rose-400 border border-rose-500/20",
-                          r.voice_part === 'Alto' && "bg-amber-500/10 text-amber-400 border border-amber-500/20",
-                          r.voice_part === 'Tenor' && "bg-sky-500/10 text-sky-400 border border-sky-500/20",
-                          r.voice_part === 'Bass' && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        )}>
-                          {r.voice_part}
-                        </span>
+                        {editingId === r.id ? (
+                          <input
+                            value={editFullName}
+                            onChange={e => setEditFullName(e.target.value)}
+                            className="bg-[#131521] border border-indigo-500/50 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-indigo-400 w-full"
+                          />
+                        ) : (
+                          <span className="font-bold text-slate-200">{r.full_name}</span>
+                        )}
+                      </td>
+                      <td className="px-8 py-5">
+                        {editingId === r.id ? (
+                          <select
+                            value={editVoicePart}
+                            onChange={e => setEditVoicePart(e.target.value)}
+                            className="bg-[#131521] border border-indigo-500/50 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-indigo-400"
+                          >
+                            {VOICE_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                        ) : (
+                          <span className={cn(
+                            "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest",
+                            r.voice_part === 'Soprano' && "bg-rose-500/10 text-rose-400 border border-rose-500/20",
+                            r.voice_part === 'Alto' && "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+                            r.voice_part === 'Tenor' && "bg-sky-500/10 text-sky-400 border border-sky-500/20",
+                            r.voice_part === 'Bass' && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          )}>
+                            {r.voice_part}
+                          </span>
+                        )}
                       </td>
                       <td className="px-8 py-5 text-right text-xs font-bold text-slate-500">
                         {new Date(r.created_at).toLocaleDateString()} at {new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="px-8 py-5 text-center">
+                        {editingId === r.id ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button disabled={savingId === r.id} onClick={handleSaveEdit} className="p-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors">
+                              {savingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                            </button>
+                            <button disabled={savingId === r.id} onClick={() => setEditingId(null)} className="p-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => handleEditClick(r)} className="p-1.5 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors">
+                            <Edit2 size={14} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
                   {paginatedData.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-8 py-8 text-center text-slate-500 text-sm font-medium">
+                      <td colSpan={5} className="px-8 py-8 text-center text-slate-500 text-sm font-medium">
                         No registrations found.
                       </td>
                     </tr>

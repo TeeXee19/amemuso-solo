@@ -30,3 +30,11 @@ export const updateMaxSlots = async (newLimit: number) => {
         .eq('key', 'max_slots');
     if (error) throw error;
 };
+
+export const editRegistration = async (id: number, fullName: string, voicePart: string) => {
+    const { error } = await supabase
+        .from('registrations')
+        .update({ full_name: fullName, voice_part: voicePart })
+        .eq('id', id);
+    if (error) throw error;
+};
