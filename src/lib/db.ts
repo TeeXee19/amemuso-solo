@@ -38,3 +38,11 @@ export const editRegistration = async (id: number, fullName: string, voicePart: 
         .eq('id', id);
     if (error) throw error;
 };
+
+export const deleteRegistration = async (id: number) => {
+    const { error } = await supabase
+        .from('registrations')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+};

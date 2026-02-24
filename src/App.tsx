@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
-import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration } from './lib/db';
+import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration } from './lib/db';
 import {
-  Check, Loader2, Music, X, Edit2,
+  Check, Loader2, Music, X, Edit2, Trash2,
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid,
   ChevronDown
 } from 'lucide-react';
@@ -400,6 +400,7 @@ function AdminView() {
   const [editFullName, setEditFullName] = useState('');
   const [editVoicePart, setEditVoicePart] = useState('');
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const fetchData = async () => {
     try {
@@ -459,6 +460,19 @@ function AdminView() {
       console.error(err);
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const handleDeleteClick = async (id: number) => {
+    if (!window.confirm("Are you sure you want to completely remove this registration and free up the slot?")) return;
+    setDeletingId(id);
+    try {
+      await deleteRegistration(id);
+      // Wait for Supabase realtime to update the list
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -606,14 +620,19 @@ function AdminView() {
                             <button disabled={savingId === r.id} onClick={handleSaveEdit} className="p-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors">
                               {savingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                             </button>
-                            <button disabled={savingId === r.id} onClick={() => setEditingId(null)} className="p-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors">
+                            <button disabled={savingId === r.id} onClick={() => setEditingId(null)} className="p-1.5 bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 rounded-lg transition-colors">
                               <X size={14} />
                             </button>
                           </div>
                         ) : (
-                          <button onClick={() => handleEditClick(r)} className="p-1.5 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors">
-                            <Edit2 size={14} />
-                          </button>
+                          <div className="flex items-center justify-center gap-2">
+                            <button onClick={() => handleEditClick(r)} disabled={deletingId === r.id} className="p-1.5 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors disabled:opacity-50">
+                              <Edit2 size={14} />
+                            </button>
+                            <button onClick={() => handleDeleteClick(r.id)} disabled={deletingId === r.id} className="p-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors disabled:opacity-50">
+                              {deletingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
