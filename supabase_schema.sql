@@ -12,11 +12,21 @@ CREATE TABLE IF NOT EXISTS registrations (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- For existing tables, add these columns if they were created before features:
-ALTER TABLE registrations ADD COLUMN IF NOT EXISTS song_title TEXT;
-ALTER TABLE registrations ADD COLUMN IF NOT EXISTS artist_composer TEXT;
-ALTER TABLE registrations ADD COLUMN IF NOT EXISTS song_summary TEXT;
-ALTER TABLE registrations ADD COLUMN IF NOT EXISTS song_status TEXT DEFAULT 'pending';
+-- Create repertoire_submissions table (1-to-many relationship)
+CREATE TABLE IF NOT EXISTS repertoire_submissions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  registration_id UUID NOT NULL REFERENCES registrations(id) ON DELETE CASCADE,
+  song_title TEXT NOT NULL,
+  artist_composer TEXT NOT NULL,
+  song_summary TEXT,
+  song_link TEXT,
+  score_link TEXT,
+  status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Deprecated columns on registrations (kept for old data, but no longer used):
+-- song_title, artist_composer, song_summary, song_status
 
 -- Create config table
 CREATE TABLE IF NOT EXISTS config (

@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
-import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration } from './lib/db';
+import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires } from './lib/db';
 import {
   Check, Loader2, Music, X, Edit2, Trash2, Sun, Moon, Monitor,
-  ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen
+  ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -17,6 +17,45 @@ function cn(...inputs: ClassValue[]) {
 const VOICE_PARTS = ['Soprano', 'Alto', 'Tenor', 'Bass'];
 
 // --- Components ---
+
+function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading }: any) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="w-full max-w-sm overflow-hidden bg-white dark:bg-[#131521] rounded-3xl shadow-2xl border border-slate-200 dark:border-white/10"
+      >
+        <div className="p-6">
+          <div className="w-12 h-12 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center mb-4">
+            <Trash2 size={24} />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">{title}</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-8">{message}</p>
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="flex-1 py-3 px-4 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={loading}
+              className="flex-1 py-3 px-4 rounded-xl text-sm font-bold bg-rose-500 hover:bg-rose-400 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? <Loader2 size={16} className="animate-spin" /> : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 // --- Shared Layout ---
 
@@ -459,6 +498,7 @@ function PublicView() {
 function AdminView() {
   const [activeTab, setActiveTab] = useState('list');
   const [registrations, setRegistrations] = useState<any[]>([]);
+  const [repertoires, setRepertoires] = useState<any[]>([]);
   const [maxSlots, setMaxSlots] = useState(60);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -470,12 +510,28 @@ function AdminView() {
   const [editVoicePart, setEditVoicePart] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [repertoireFilter, setRepertoireFilter] = useState('All');
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [deletingRepId, setDeletingRepId] = useState<string | null>(null);
+
+  const [selectedRepertoires, setSelectedRepertoires] = useState<string[]>([]);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+
+  // Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => { } });
 
   const fetchData = async () => {
     try {
-      const [configs, regs] = await Promise.all([getConfigs(), getRegistrations()]);
+      const [configs, regs, reps] = await Promise.all([getConfigs(), getRegistrations(), getRepertoires()]);
       if (configs.max_slots) setMaxSlots(parseInt(configs.max_slots));
       setRegistrations(regs);
+      setRepertoires(reps);
     } catch (err) {
       console.error(err);
     } finally {
@@ -487,25 +543,143 @@ function AdminView() {
     if (!isSupabaseConfigured) return;
     fetchData();
     const sub = supabase.channel('admin').on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, fetchData).subscribe();
-    return () => { supabase.removeChannel(sub); };
+    const sub_reps = supabase.channel('admin_reps').on('postgres_changes', { event: '*', schema: 'public', table: 'repertoire_submissions' }, fetchData).subscribe();
+    return () => { supabase.removeChannel(sub); supabase.removeChannel(sub_reps); };
   }, []);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, voicePartFilter, itemsPerPage, activeTab]);
+  }, [searchQuery, voicePartFilter, repertoireFilter, itemsPerPage, activeTab]);
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
   // Admin Song Approval
-  const handleSongStatusUpdate = async (id: string, status: 'pending' | 'approved' | 'rejected') => {
+  const handleApproveSong = async (submissionId: string, registrationId: string) => {
+    setApprovingId(submissionId);
     try {
-      // @ts-ignore
-      const { updateSongStatus } = await import('./lib/db');
-      await updateSongStatus(id, status);
+      await approveRepertoire(submissionId, registrationId);
     } catch (err: any) {
       console.error(err);
-      alert("Failed to update song status: " + (err.message || 'Unknown error'));
+      alert("Failed to approve song: " + (err.message || 'Unknown error'));
+    } finally {
+      setApprovingId(null);
     }
+  };
+
+  const handleRejectSong = async (submissionId: string) => {
+    setRejectingId(submissionId);
+    try {
+      await rejectRepertoire(submissionId);
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to reject song: " + (err.message || 'Unknown error'));
+    } finally {
+      setRejectingId(null);
+    }
+  };
+
+  const handleDeleteSong = async (submissionId: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Song Option",
+      message: "Are you sure you want to completely delete this song option? The soloist will be able to submit a new one.",
+      onConfirm: async () => {
+        setDeletingRepId(submissionId);
+        try {
+          await deleteRepertoire(submissionId);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          console.error(err);
+          alert("Failed to delete song: " + (err.message || 'Unknown error'));
+        } finally {
+          setDeletingRepId(null);
+        }
+      }
+    });
+  };
+
+  const handleSelectAllRepertoires = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      // NOTE: Using `filteredRepertoires` here (calculated further below) by recreating its logic for simplicity before hoisting
+      const f = repertoires.filter(r => {
+        const matchesSearch = r.registrations?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.song_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.registrations?.slot_id?.toString().includes(searchQuery);
+        const matchesStatus = repertoireFilter === 'All' || (r.status || 'pending') === repertoireFilter.toLowerCase();
+        return matchesSearch && matchesStatus;
+      });
+      const p = f.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+      setSelectedRepertoires(p.map((r: any) => r.id));
+    } else {
+      setSelectedRepertoires([]);
+    }
+  };
+
+  const handleSelectRepertoire = (id: string) => {
+    if (selectedRepertoires.includes(id)) {
+      setSelectedRepertoires(selectedRepertoires.filter(r => r !== id));
+    } else {
+      setSelectedRepertoires([...selectedRepertoires, id]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Bulk Delete Songs",
+      message: `Are you sure you want to completely delete ${selectedRepertoires.length} song options?`,
+      onConfirm: async () => {
+        setBulkActionLoading(true);
+        try {
+          await Promise.all(selectedRepertoires.map(id => deleteRepertoire(id)));
+          setSelectedRepertoires([]);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          console.error(err);
+          alert("Failed to delete songs: " + (err.message || 'Unknown error'));
+        } finally {
+          setBulkActionLoading(false);
+        }
+      }
+    });
+  };
+
+  const handleBulkApprove = async () => {
+    if (!window.confirm(`Are you sure you want to approve ${selectedRepertoires.length} song options? Other pending songs for these soloists will be deleted.`)) return;
+    setBulkActionLoading(true);
+    try {
+      await Promise.all(selectedRepertoires.map(id => {
+        const rep = repertoires.find(r => r.id === id);
+        return approveRepertoire(id, rep.registration_id); // Safe assuming 'rep' exists
+      }));
+      setSelectedRepertoires([]);
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to approve songs: " + (err.message || 'Unknown error'));
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleResetAllSongs = async () => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Factory Reset Repertoires",
+      message: "WARNING: Are you sure you want to delete ALL submitted repertoires? This action cannot be undone and everyone will need to start over.",
+      onConfirm: async () => {
+        setBulkActionLoading(true);
+        try {
+          await deleteAllRepertoires();
+          setSelectedRepertoires([]);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          console.error(err);
+          alert("Failed to reset songs: " + (err.message || 'Unknown error'));
+        } finally {
+          setBulkActionLoading(false);
+        }
+      }
+    });
   };
 
   const filtered = registrations.filter(r => {
@@ -515,14 +689,13 @@ function AdminView() {
     return matchesSearch && matchesVoice;
   }).sort((a, b) => a.slot_id - b.slot_id);
 
-  const submittedSongs = registrations.filter(r => r.song_title && r.song_title.trim() !== '');
-  const submittedRepertoires = submittedSongs.filter(r => {
-    const matchesSearch = r.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  const submittedRepertoires = repertoires.filter(r => {
+    const matchesSearch = r.registrations?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.song_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.slot_id?.toString().includes(searchQuery);
-    return matchesSearch;
-  }).sort((a, b) => a.slot_id - b.slot_id);
-
+      r.registrations?.slot_id?.toString().includes(searchQuery);
+    const matchesStatus = repertoireFilter === 'All' || (r.status || 'pending') === repertoireFilter.toLowerCase();
+    return matchesSearch && matchesStatus;
+  });
 
   const totalPages = Math.ceil(activeTab === 'list' ? filtered.length / itemsPerPage : submittedRepertoires.length / itemsPerPage);
   const paginated = (activeTab === 'list' ? filtered : submittedRepertoires).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -597,9 +770,15 @@ function AdminView() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-12 glass p-8 rounded-[2.5rem] border-slate-200 dark:border-white/5 space-y-8">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-            <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-2xl border border-slate-200 dark:border-white/5">
-              <button onClick={() => setActiveTab('list')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'list' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500")}>Member List</button>
-              <button onClick={() => setActiveTab('settings')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'settings' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500")}>App Settings</button>
+            <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-2xl border border-slate-200 dark:border-white/5 overflow-x-auto whitespace-nowrap hide-scroll">
+              <button onClick={() => setActiveTab('list')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'list' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>Member List</button>
+              <button onClick={() => setActiveTab('repertoire')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'repertoire' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>
+                Song Approvals
+                {repertoires.filter(s => s.status === 'pending').length > 0 && (
+                  <span className="ml-2 bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px]">{repertoires.filter(s => s.status === 'pending').length}</span>
+                )}
+              </button>
+              <button onClick={() => setActiveTab('settings')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'settings' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>App Settings</button>
             </div>
             {activeTab === 'list' && (
               <div className="flex flex-col xl:flex-row gap-4 w-full lg:w-auto">
@@ -627,6 +806,33 @@ function AdminView() {
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
                   <input
                     placeholder="Search name or voice part..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
+                  />
+                </div>
+              </div>
+            )}
+            {activeTab === 'repertoire' && (
+              <div className="flex flex-col xl:flex-row gap-4 w-full lg:w-auto">
+                <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5 overflow-x-auto">
+                  {['All', 'Pending', 'Approved', 'Rejected'].map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setRepertoireFilter(p)}
+                      className={cn(
+                        "px-4 py-2 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all whitespace-nowrap",
+                        repertoireFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <div className="relative w-full xl:w-64">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
+                  <input
+                    placeholder="Search song or soloist..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
@@ -779,12 +985,43 @@ function AdminView() {
             </div>
           ) : activeTab === 'repertoire' ? (
             <div className="space-y-6">
-              <div className="flex items-center gap-3 border-b border-white/5 pb-6">
-                <Music size={24} className="text-indigo-400" />
-                <h3 className="text-2xl font-black text-white tracking-tight">Review Repertoires</h3>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-6">
+                <div className="flex items-center gap-3">
+                  <Music size={24} className="text-indigo-400" />
+                  <h3 className="text-2xl font-black text-white tracking-tight">Review Repertoires</h3>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                  {selectedRepertoires.length > 0 && (
+                    <div className="flex items-center gap-2 mr-4 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-xl">
+                      <span className="text-xs font-bold text-indigo-400">{selectedRepertoires.length} selected</span>
+                      <button
+                        onClick={handleBulkApprove}
+                        disabled={bulkActionLoading}
+                        className="p-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-md transition-colors disabled:opacity-50 ml-2" title="Approve Selected">
+                        {bulkActionLoading ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                      </button>
+                      <button
+                        onClick={handleBulkDelete}
+                        disabled={bulkActionLoading}
+                        className="p-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-md transition-colors disabled:opacity-50" title="Delete Selected">
+                        {bulkActionLoading ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                      </button>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleResetAllSongs}
+                    disabled={bulkActionLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 rounded-xl text-xs font-bold transition-all disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {bulkActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    Factory Reset Repertoires
+                  </button>
+                </div>
               </div>
 
-              {submittedSongs.length === 0 ? (
+              {repertoires.length === 0 ? (
                 <div className="py-12 text-center text-slate-500">
                   <p>No songs have been submitted for review yet.</p>
                 </div>
@@ -793,26 +1030,50 @@ function AdminView() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-white/5">
+                        <th className="py-4 px-4 w-12">
+                          <input
+                            type="checkbox"
+                            checked={paginated.length > 0 && selectedRepertoires.length === paginated.length}
+                            onChange={handleSelectAllRepertoires}
+                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
+                          />
+                        </th>
                         <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest">Soloist</th>
                         <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[150px]">Song</th>
-                        <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Summary</th>
+                        <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Links / Summary</th>
                         <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {paginated.map((r: any) => {
-                        const status = r.song_status || 'pending';
+                        const status = r.status || 'pending';
                         return (
-                          <tr key={r.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors group">
+                          <tr key={r.id} className={cn("border-b border-white/5 transition-colors group", selectedRepertoires.includes(r.id) ? "bg-indigo-500/5" : "hover:bg-white/[0.02]")}>
                             <td className="py-4 px-4">
-                              <div className="font-bold text-white whitespace-nowrap">{r.full_name}</div>
-                              <div className="text-[10px] text-slate-500 mt-1 uppercase">Slot {r.slot_id} • {r.voice_part}</div>
+                              <input
+                                type="checkbox"
+                                checked={selectedRepertoires.includes(r.id)}
+                                onChange={() => handleSelectRepertoire(r.id)}
+                                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
+                              />
+                            </td>
+                            <td className="py-4 px-4">
+                              <div className="font-bold text-white whitespace-nowrap">{r.registrations?.full_name}</div>
+                              <div className="text-[10px] text-slate-500 mt-1 uppercase">Slot {r.registrations?.slot_id} • {r.registrations?.voice_part}</div>
                             </td>
                             <td className="py-4 px-4">
                               <div className="font-bold text-indigo-400">{r.song_title}</div>
                               <div className="text-xs text-slate-400 italic mt-1">{r.artist_composer}</div>
                             </td>
-                            <td className="py-4 px-4 text-xs text-slate-400 leading-relaxed max-w-[300px] truncate group-hover:whitespace-normal group-hover:break-words">{r.song_summary || '—'}</td>
+                            <td className="py-4 px-4 text-xs text-slate-400 leading-relaxed max-w-[300px] truncate group-hover:whitespace-normal group-hover:break-words">
+                              {(r.song_link || r.score_link) && (
+                                <div className="flex gap-4 mb-2">
+                                  {r.song_link && <a href={r.song_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sky-400 hover:text-sky-300 transition-colors uppercase tracking-widest font-black text-[10px] bg-sky-500/10 px-2 py-0.5 rounded"><LinkIcon size={10} /> Audio</a>}
+                                  {r.score_link && <a href={r.score_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-rose-400 hover:text-rose-300 transition-colors uppercase tracking-widest font-black text-[10px] bg-rose-500/10 px-2 py-0.5 rounded"><ExternalLink size={10} /> Score</a>}
+                                </div>
+                              )}
+                              {r.song_summary}
+                            </td>
                             <td className="py-4 px-4">
                               <div className="flex items-center justify-end gap-2">
                                 {status === 'approved' ? (
@@ -826,23 +1087,24 @@ function AdminView() {
                                 ) : (
                                   <>
                                     <button
-                                      onClick={() => handleSongStatusUpdate(r.id, 'approved')}
-                                      className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg transition-colors border border-emerald-500/20" title="Approve">
-                                      <Check size={14} />
+                                      onClick={() => handleApproveSong(r.id, r.registration_id)}
+                                      disabled={approvingId === r.id || rejectingId === r.id || deletingRepId === r.id}
+                                      className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg transition-colors border border-emerald-500/20 disabled:opacity-50" title="Approve">
+                                      {approvingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                                     </button>
                                     <button
-                                      onClick={() => handleSongStatusUpdate(r.id, 'rejected')}
-                                      className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors border border-rose-500/20" title="Reject">
-                                      <X size={14} />
+                                      onClick={() => handleRejectSong(r.id)}
+                                      disabled={rejectingId === r.id || approvingId === r.id || deletingRepId === r.id}
+                                      className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors border border-rose-500/20 disabled:opacity-50" title="Reject">
+                                      {rejectingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteSong(r.id)}
+                                      disabled={deletingRepId === r.id || rejectingId === r.id || approvingId === r.id}
+                                      className="p-2 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-lg transition-colors border border-slate-500/20 disabled:opacity-50" title="Delete">
+                                      {deletingRepId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                                     </button>
                                   </>
-                                )}
-                                {status !== 'pending' && (
-                                  <button
-                                    onClick={() => handleSongStatusUpdate(r.id, 'pending')}
-                                    className="p-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-colors ml-2 text-[10px] uppercase font-bold" title="Reset to Pending">
-                                    Reset
-                                  </button>
                                 )}
                               </div>
                             </td>
@@ -851,6 +1113,43 @@ function AdminView() {
                       })}
                     </tbody>
                   </table>
+                  <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
+                      <select
+                        value={itemsPerPage}
+                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                        className="bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                      >
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                        {submittedRepertoires.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, submittedRepertoires.length)} of {submittedRepertoires.length}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage(p => p - 1)}
+                          className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <button
+                          disabled={currentPage === totalPages || totalPages === 0}
+                          onClick={() => setCurrentPage(p => p + 1)}
+                          className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -876,6 +1175,17 @@ function AdminView() {
           )}
         </div>
       </div>
+
+      <AnimatePresence>
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          onConfirm={confirmModal.onConfirm}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          loading={deletingRepId !== null || bulkActionLoading}
+        />
+      </AnimatePresence>
     </Layout>
   );
 }
@@ -982,21 +1292,25 @@ function RosterView() {
 
 function SongEntryView() {
   const [registrations, setRegistrations] = useState<any[]>([]);
+  const [repertoires, setRepertoires] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRegId, setSelectedRegId] = useState<string>('');
 
   // Form state
-  const [songTitle, setSongTitle] = useState('');
-  const [artist, setArtist] = useState('');
-  const [summary, setSummary] = useState('');
+  const [songs, setSongs] = useState([{ title: '', artist: '', summary: '', songLink: '', scoreLink: '' }]);
   const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const fetchData = async () => {
     try {
-      const regs = await getRegistrations();
-      // Sort by slot ID
+      const [regs, reps] = await Promise.all([getRegistrations(), getRepertoires()]);
       regs.sort((a: any, b: any) => a.slot_id - b.slot_id);
       setRegistrations(regs);
+      setRepertoires(reps);
     } catch (err) {
       console.error(err);
     } finally {
@@ -1010,36 +1324,74 @@ function SongEntryView() {
       return;
     }
     fetchData();
-    const sub = supabase.channel('songs').on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, fetchData).subscribe();
-    return () => { supabase.removeChannel(sub); };
+    const sub_regs = supabase.channel('songs_regs').on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, fetchData).subscribe();
+    const sub_reps = supabase.channel('songs_reps').on('postgres_changes', { event: '*', schema: 'public', table: 'repertoire_submissions' }, fetchData).subscribe();
+    return () => { supabase.removeChannel(sub_regs); supabase.removeChannel(sub_reps); };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRegId || !songTitle.trim() || !artist.trim()) return;
+    if (!selectedRegId || songs.some(s => !s.title.trim() || !s.artist.trim())) return;
 
     setSubmitting(true);
     try {
-      // @ts-ignore - Assuming updateRegistrationSong was exported from db.ts
-      const { updateRegistrationSong } = await import('./lib/db');
-      await updateRegistrationSong(selectedRegId, songTitle, artist, summary);
+      // Submit all songs within the array
+      await Promise.all(songs.map(song =>
+        addRepertoire(selectedRegId, song.title, song.artist, song.summary, song.songLink, song.scoreLink)
+      ));
 
       // Clear form
       setSelectedRegId('');
-      setSongTitle('');
-      setArtist('');
-      setSummary('');
-      alert("Song selection saved successfully!");
+      setSongs([{ title: '', artist: '', summary: '', songLink: '', scoreLink: '' }]);
+      setSuccessMessage("Your song selections have been submitted for review successfully!");
+      setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
       console.error(err);
-      alert("Failed to save song: " + (err.message || 'Unknown error'));
+      alert("Failed to save songs: " + (err.message || 'Unknown error'));
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Filter registrations that have already submitted a song
-  const submittedRepertoires = registrations.filter(r => r.song_title && r.song_title.trim() !== '');
+  const addSongField = () => {
+    setSongs([...songs, { title: '', artist: '', summary: '', songLink: '', scoreLink: '' }]);
+  };
+
+  const removeSongField = (index: number) => {
+    if (songs.length <= 1) return;
+    setSongs(songs.filter((_, i) => i !== index));
+  };
+
+  const handleSongChange = (index: number, field: string, value: string) => {
+    const newSongs = [...songs];
+    // @ts-ignore
+    newSongs[index][field] = value;
+    setSongs(newSongs);
+  };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, itemsPerPage]);
+
+  const filteredRepertoires = repertoires.filter(r => {
+    const matchesSearch = r.song_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.artist_composer?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.registrations?.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === 'All' || (r.status || 'pending') === statusFilter.toLowerCase();
+    return matchesSearch && matchesStatus;
+  });
+
+  const totalPages = Math.ceil(filteredRepertoires.length / itemsPerPage);
+  const paginatedRepertoires = filteredRepertoires.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Compute users who are "locked" from submitting
+  // Users are locked if they have ANY repertoire with status 'pending' or 'approved'.
+  // If all their repertoires are 'rejected', they are allowed to submit again.
+  const lockedRegIds = new Set(
+    repertoires
+      .filter(r => r.status === 'pending' || r.status === 'approved')
+      .map(r => r.registration_id)
+  );
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
@@ -1053,6 +1405,12 @@ function SongEntryView() {
             <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">Submit Your Song</h2>
             <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">Select your allocated slot to add your chosen repertoire details.</p>
 
+            {successMessage && (
+              <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 dark:text-emerald-400 rounded-2xl text-xs font-bold flex items-center gap-3">
+                <Check size={16} /> {successMessage}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Soloist / Slot</label>
@@ -1063,53 +1421,110 @@ function SongEntryView() {
                   required
                 >
                   <option value="" disabled>Select your name...</option>
-                  {registrations.map(r => (
-                    <option key={r.id} value={r.id}>S-{r.slot_id} : {r.full_name}</option>
-                  ))}
+                  {registrations.map(r => {
+                    const isLocked = lockedRegIds.has(r.id);
+                    return (
+                      <option key={r.id} value={r.id} disabled={isLocked}>
+                        {isLocked ? '🔒 ' : ''}S-{r.slot_id} : {r.full_name} {isLocked ? '(Already Submitted)' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Song Title</label>
-                <input
-                  type="text"
-                  placeholder="e.g. O mio babbino caro"
-                  value={songTitle}
-                  onChange={e => setSongTitle(e.target.value)}
-                  className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all placeholder:font-normal placeholder:text-slate-400"
-                  required
-                />
-              </div>
+              <div className="space-y-6">
+                {songs.map((song, index) => (
+                  <div key={index} className="p-4 rounded-2xl border border-white/5 bg-slate-50 dark:bg-white/[0.02] relative space-y-5">
+                    {songs.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeSongField(index)}
+                        className="absolute -top-3 -right-3 w-8 h-8 flex items-center justify-center bg-rose-500 text-white rounded-full shadow-lg hover:bg-rose-400 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Artist / Composer</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Giacomo Puccini"
-                  value={artist}
-                  onChange={e => setArtist(e.target.value)}
-                  className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all placeholder:font-normal placeholder:text-slate-400"
-                  required
-                />
-              </div>
+                    <div className="flex items-center gap-2 mb-2 border-b border-white/10 pb-3">
+                      <Music size={16} className="text-indigo-400" />
+                      <h4 className="font-black text-slate-900 dark:text-white text-sm">Option {index + 1}</h4>
+                    </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Brief Summary (Optional)</label>
-                <textarea
-                  placeholder="A short description of the piece..."
-                  value={summary}
-                  onChange={e => setSummary(e.target.value)}
-                  rows={3}
-                  className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3.5 text-sm text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all resize-none placeholder:text-slate-400"
-                />
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Song Title</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. O mio babbino caro"
+                        value={song.title}
+                        onChange={e => handleSongChange(index, 'title', e.target.value)}
+                        className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all placeholder:font-normal placeholder:text-slate-400"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Artist / Composer</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Giacomo Puccini"
+                        value={song.artist}
+                        onChange={e => handleSongChange(index, 'artist', e.target.value)}
+                        className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all placeholder:font-normal placeholder:text-slate-400"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Brief Summary (Optional)</label>
+                      <textarea
+                        placeholder="A short description of the piece..."
+                        value={song.summary}
+                        onChange={e => handleSongChange(index, 'summary', e.target.value)}
+                        rows={2}
+                        className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3.5 text-sm text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all resize-none placeholder:text-slate-400"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Song Link (Optional)</label>
+                        <input
+                          type="url"
+                          placeholder="https://youtu.be/..."
+                          value={song.songLink}
+                          onChange={e => handleSongChange(index, 'songLink', e.target.value)}
+                          className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all placeholder:font-normal placeholder:text-slate-400"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Score Link (Optional)</label>
+                        <input
+                          type="url"
+                          placeholder="PDF link..."
+                          value={song.scoreLink}
+                          onChange={e => handleSongChange(index, 'scoreLink', e.target.value)}
+                          className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all placeholder:font-normal placeholder:text-slate-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
 
               <button
+                type="button"
+                onClick={addSongField}
+                className="w-full py-3 bg-white/5 hover:bg-white/10 text-indigo-400 font-bold text-sm tracking-wide rounded-2xl transition-all border border-indigo-500/20 flex items-center justify-center gap-2"
+              >
+                + Add Another Option
+              </button>
+
+              <button
                 type="submit"
-                disabled={submitting || registrations.length === 0}
+                disabled={submitting || !selectedRegId}
                 className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-white font-black rounded-2xl transition-all shadow-lg glow-emerald disabled:opacity-50 disabled:hover:bg-emerald-500 flex items-center justify-center gap-2 mt-4"
               >
-                {submitting ? <Loader2 className="animate-spin" size={20} /> : <><Check size={20} /> Save Repertoire</>}
+                {submitting ? <Loader2 className="animate-spin" size={20} /> : <><Check size={20} /> Submit Repertoire Options</>}
               </button>
             </form>
           </div>
@@ -1118,12 +1533,39 @@ function SongEntryView() {
         {/* Right Side: Repertoire Table */}
         <div className="lg:col-span-8">
           <div className="glass p-8 rounded-[2.5rem] border-slate-200 dark:border-white/5 space-y-6">
-            <div className="flex items-center gap-3 border-b border-slate-100 dark:border-white/5 pb-6">
-              <BookOpen size={24} className="text-indigo-500" />
-              <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Submitted Repertoire</h3>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 dark:border-white/5 pb-6">
+              <div className="flex items-center gap-3">
+                <BookOpen size={24} className="text-indigo-500" />
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Submitted Repertoire</h3>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5 overflow-x-auto">
+                  {['All', 'Pending', 'Approved', 'Rejected'].map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setStatusFilter(p)}
+                      className={cn(
+                        "px-3 py-1.5 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all whitespace-nowrap",
+                        statusFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <div className="relative w-full sm:w-48">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" size={14} />
+                  <input
+                    placeholder="Search songs..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl pl-9 pr-3 py-2 text-xs focus:border-indigo-500 outline-none transition-all"
+                  />
+                </div>
+              </div>
             </div>
 
-            {submittedRepertoires.length === 0 ? (
+            {repertoires.length === 0 ? (
               <div className="py-12 text-center text-slate-500">
                 <Music size={48} className="mx-auto mb-4 opacity-20" />
                 <p>No songs have been submitted yet.</p>
@@ -1137,24 +1579,32 @@ function SongEntryView() {
                       <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Soloist</th>
                       <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Song Title</th>
                       <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[150px]">Artist / Composer</th>
-                      <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Summary</th>
+                      <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Links / Summary</th>
                       <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap text-right">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {submittedRepertoires.map((r) => {
-                      const status = r.song_status || 'pending';
+                    {paginatedRepertoires.map((r) => {
+                      const status = r.status || 'pending';
                       return (
                         <tr key={r.id} className="border-b border-slate-50 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
                           <td className="py-4 px-4">
                             <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-xs">
-                              S-{r.slot_id}
+                              S-{r.registrations?.slot_id}
                             </div>
                           </td>
-                          <td className="py-4 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">{r.full_name}</td>
+                          <td className="py-4 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">{r.registrations?.full_name}</td>
                           <td className="py-4 px-4 font-bold text-indigo-500 dark:text-indigo-400">{r.song_title}</td>
                           <td className="py-4 px-4 text-slate-600 dark:text-slate-300 italic">{r.artist_composer}</td>
-                          <td className="py-4 px-4 text-xs text-slate-500 leading-relaxed max-w-[250px] truncate group-hover:whitespace-normal group-hover:break-words transition-all">{r.song_summary || '—'}</td>
+                          <td className="py-4 px-4 text-xs text-slate-500 leading-relaxed max-w-[250px] truncate group-hover:whitespace-normal group-hover:break-words transition-all">
+                            {(r.song_link || r.score_link) && (
+                              <div className="flex gap-4 mb-2">
+                                {r.song_link && <a href={r.song_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sky-500 hover:text-sky-400 transition-colors uppercase tracking-widest font-black text-[10px] bg-sky-50 dark:bg-sky-500/10 px-2 py-0.5 rounded"><LinkIcon size={10} /> Audio</a>}
+                                {r.score_link && <a href={r.score_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-rose-500 hover:text-rose-400 transition-colors uppercase tracking-widest font-black text-[10px] bg-rose-50 dark:bg-rose-500/10 px-2 py-0.5 rounded"><ExternalLink size={10} /> Score</a>}
+                              </div>
+                            )}
+                            {r.song_summary || '—'}
+                          </td>
                           <td className="py-4 px-4 text-right">
                             <span className={cn(
                               "px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider whitespace-nowrap border",
@@ -1170,6 +1620,42 @@ function SongEntryView() {
                     })}
                   </tbody>
                 </table>
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-4 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50 mt-4 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                      className="bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 text-slate-300 text-xs rounded-xl px-2 py-1 outline-none focus:border-indigo-500"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                      {filteredRepertoires.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, filteredRepertoires.length)} of {filteredRepertoires.length}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(p => p - 1)}
+                        className="p-1.5 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      <button
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        onClick={() => setCurrentPage(p => p + 1)}
+                        className="p-1.5 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
