@@ -5,8 +5,16 @@ CREATE TABLE IF NOT EXISTS registrations (
   slot_id INTEGER UNIQUE NOT NULL,
   voice_part TEXT NOT NULL,
   phone_number TEXT,
+  song_title TEXT,
+  artist_composer TEXT,
+  song_summary TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- For existing tables, add these columns if they were created before features:
+ALTER TABLE registrations ADD COLUMN IF NOT EXISTS song_title TEXT;
+ALTER TABLE registrations ADD COLUMN IF NOT EXISTS artist_composer TEXT;
+ALTER TABLE registrations ADD COLUMN IF NOT EXISTS song_summary TEXT;
 
 -- Create config table
 CREATE TABLE IF NOT EXISTS config (

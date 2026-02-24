@@ -5,7 +5,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration } from './lib/db';
 import {
   Check, Loader2, Music, X, Edit2, Trash2, Sun, Moon, Monitor,
-  ChevronRight, ChevronLeft, Search, Download, Settings, Grid
+  ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -82,19 +82,28 @@ function Layout({ children, subtitle }: any) {
 
           <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5 mr-4 ml-2">
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/register')}
               className={cn(
                 "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
-                location.pathname === '/' ? "bg-slate-200 dark:bg-white/10 text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-white"
+                location.pathname === '/register' ? "bg-slate-200 dark:bg-white/10 text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-white"
               )}
             >
               Registration
             </button>
             <button
-              onClick={() => navigate('/roster')}
+              onClick={() => navigate('/repertoire')}
               className={cn(
                 "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
-                location.pathname === '/roster' ? "bg-slate-200 dark:bg-white/10 text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-white"
+                location.pathname === '/repertoire' ? "bg-slate-200 dark:bg-white/10 text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-white"
+              )}
+            >
+              Repertoire
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className={cn(
+                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                location.pathname === '/' ? "bg-slate-200 dark:bg-white/10 text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-white"
               )}
             >
               Roster
@@ -870,6 +879,194 @@ function RosterView() {
   );
 }
 
+// --- Song Entry View ---
+
+function SongEntryView() {
+  const [registrations, setRegistrations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedRegId, setSelectedRegId] = useState<string>('');
+
+  // Form state
+  const [songTitle, setSongTitle] = useState('');
+  const [artist, setArtist] = useState('');
+  const [summary, setSummary] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      const regs = await getRegistrations();
+      // Sort by slot ID
+      regs.sort((a: any, b: any) => a.slot_id - b.slot_id);
+      setRegistrations(regs);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+    fetchData();
+    const sub = supabase.channel('songs').on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, fetchData).subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRegId || !songTitle.trim() || !artist.trim()) return;
+
+    setSubmitting(true);
+    try {
+      // @ts-ignore - Assuming updateRegistrationSong was exported from db.ts
+      const { updateRegistrationSong } = await import('./lib/db');
+      await updateRegistrationSong(selectedRegId, songTitle, artist, summary);
+
+      // Clear form
+      setSelectedRegId('');
+      setSongTitle('');
+      setArtist('');
+      setSummary('');
+      alert("Song selection saved successfully!");
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to save song: " + (err.message || 'Unknown error'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Filter registrations that have already submitted a song
+  const submittedRepertoires = registrations.filter(r => r.song_title && r.song_title.trim() !== '');
+
+  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
+
+  return (
+    <Layout subtitle="Solo Repertoire Submission">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+        {/* Left Side: Form */}
+        <div className="lg:col-span-4 space-y-8">
+          <div className="glass p-8 rounded-[2.5rem] border-slate-200 dark:border-white/5 relative overflow-hidden">
+            <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">Submit Your Song</h2>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">Select your allocated slot to add your chosen repertoire details.</p>
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Soloist / Slot</label>
+                <select
+                  value={selectedRegId}
+                  onChange={e => setSelectedRegId(e.target.value)}
+                  className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all appearance-none"
+                  required
+                >
+                  <option value="" disabled>Select your name...</option>
+                  {registrations.map(r => (
+                    <option key={r.id} value={r.id}>S-{r.slot_id} : {r.full_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Song Title</label>
+                <input
+                  type="text"
+                  placeholder="e.g. O mio babbino caro"
+                  value={songTitle}
+                  onChange={e => setSongTitle(e.target.value)}
+                  className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all placeholder:font-normal placeholder:text-slate-400"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Artist / Composer</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Giacomo Puccini"
+                  value={artist}
+                  onChange={e => setArtist(e.target.value)}
+                  className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all placeholder:font-normal placeholder:text-slate-400"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Brief Summary (Optional)</label>
+                <textarea
+                  placeholder="A short description of the piece..."
+                  value={summary}
+                  onChange={e => setSummary(e.target.value)}
+                  rows={3}
+                  className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-4 py-3.5 text-sm text-slate-900 dark:text-white focus:border-indigo-500 outline-none transition-all resize-none placeholder:text-slate-400"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting || registrations.length === 0}
+                className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-white font-black rounded-2xl transition-all shadow-lg glow-emerald disabled:opacity-50 disabled:hover:bg-emerald-500 flex items-center justify-center gap-2 mt-4"
+              >
+                {submitting ? <Loader2 className="animate-spin" size={20} /> : <><Check size={20} /> Save Repertoire</>}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Right Side: Repertoire Table */}
+        <div className="lg:col-span-8">
+          <div className="glass p-8 rounded-[2.5rem] border-slate-200 dark:border-white/5 space-y-6">
+            <div className="flex items-center gap-3 border-b border-slate-100 dark:border-white/5 pb-6">
+              <BookOpen size={24} className="text-indigo-500" />
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Submitted Repertoire</h3>
+            </div>
+
+            {submittedRepertoires.length === 0 ? (
+              <div className="py-12 text-center text-slate-500">
+                <Music size={48} className="mx-auto mb-4 opacity-20" />
+                <p>No songs have been submitted yet.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-white/5">
+                      <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Slot</th>
+                      <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Soloist</th>
+                      <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Song Title</th>
+                      <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[150px]">Artist / Composer</th>
+                      <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[250px]">Summary</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {submittedRepertoires.map((r) => (
+                      <tr key={r.id} className="border-b border-slate-50 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
+                        <td className="py-4 px-4">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-xs">
+                            S-{r.slot_id}
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">{r.full_name}</td>
+                        <td className="py-4 px-4 font-bold text-indigo-500 dark:text-indigo-400">{r.song_title}</td>
+                        <td className="py-4 px-4 text-slate-600 dark:text-slate-300 italic">{r.artist_composer}</td>
+                        <td className="py-4 px-4 text-xs text-slate-500 leading-relaxed max-w-[300px] truncate group-hover:whitespace-normal group-hover:break-words transition-all">{r.song_summary || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+    </Layout>
+  );
+}
+
 // --- Main App Entry ---
 
 export default function App() {
@@ -882,9 +1079,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<PublicView />} />
+        <Route path="/register" element={<PublicView />} />
         <Route path="/admin" element={<AdminView />} />
-        <Route path="/roster" element={<RosterView />} />
+        <Route path="/" element={<RosterView />} />
+        <Route path="/repertoire" element={<SongEntryView />} />
       </Routes>
     </BrowserRouter>
   );

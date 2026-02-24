@@ -54,3 +54,19 @@ export const deleteRegistration = async (id: string) => {
     if (!data || data.length === 0) throw new Error(`Missing record or RLS block. 0 rows deleted for ID: ${id}`);
     return data;
 };
+
+export const updateRegistrationSong = async (id: string, songTitle: string, artist: string, summary: string) => {
+    const { data, error } = await supabase
+        .from('registrations')
+        .update({
+            song_title: songTitle,
+            artist_composer: artist,
+            song_summary: summary
+        })
+        .eq('id', id)
+        .select();
+
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error(`Missing record or RLS block. 0 rows updated for ID: ${id}`);
+    return data;
+};
