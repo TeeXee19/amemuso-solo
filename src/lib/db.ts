@@ -61,8 +61,21 @@ export const updateRegistrationSong = async (id: string, songTitle: string, arti
         .update({
             song_title: songTitle,
             artist_composer: artist,
-            song_summary: summary
+            song_summary: summary,
+            song_status: 'pending' // Reset to pending if they change their song
         })
+        .eq('id', id)
+        .select();
+
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error(`Missing record or RLS block. 0 rows updated for ID: ${id}`);
+    return data;
+};
+
+export const updateSongStatus = async (id: string, status: 'pending' | 'approved' | 'rejected') => {
+    const { data, error } = await supabase
+        .from('registrations')
+        .update({ song_status: status })
         .eq('id', id)
         .select();
 

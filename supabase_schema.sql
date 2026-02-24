@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS registrations (
   song_title TEXT,
   artist_composer TEXT,
   song_summary TEXT,
+  song_status TEXT DEFAULT 'pending',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS registrations (
 ALTER TABLE registrations ADD COLUMN IF NOT EXISTS song_title TEXT;
 ALTER TABLE registrations ADD COLUMN IF NOT EXISTS artist_composer TEXT;
 ALTER TABLE registrations ADD COLUMN IF NOT EXISTS song_summary TEXT;
+ALTER TABLE registrations ADD COLUMN IF NOT EXISTS song_status TEXT DEFAULT 'pending';
 
 -- Create config table
 CREATE TABLE IF NOT EXISTS config (

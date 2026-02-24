@@ -492,18 +492,40 @@ function AdminView() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, voicePartFilter, itemsPerPage]);
+  }, [searchQuery, voicePartFilter, itemsPerPage, activeTab]);
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
+  // Admin Song Approval
+  const handleSongStatusUpdate = async (id: string, status: 'pending' | 'approved' | 'rejected') => {
+    try {
+      // @ts-ignore
+      const { updateSongStatus } = await import('./lib/db');
+      await updateSongStatus(id, status);
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to update song status: " + (err.message || 'Unknown error'));
+    }
+  };
+
   const filtered = registrations.filter(r => {
-    const matchesSearch = r.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || r.voice_part.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = r.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.slot_id?.toString().includes(searchQuery);
     const matchesVoice = voicePartFilter === 'All' || r.voice_part === voicePartFilter;
     return matchesSearch && matchesVoice;
   }).sort((a, b) => a.slot_id - b.slot_id);
 
-  const totalPages = Math.ceil(filtered.length / itemsPerPage);
-  const paginatedData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const submittedSongs = registrations.filter(r => r.song_title && r.song_title.trim() !== '');
+  const submittedRepertoires = submittedSongs.filter(r => {
+    const matchesSearch = r.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.song_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.slot_id?.toString().includes(searchQuery);
+    return matchesSearch;
+  }).sort((a, b) => a.slot_id - b.slot_id);
+
+
+  const totalPages = Math.ceil(activeTab === 'list' ? filtered.length / itemsPerPage : submittedRepertoires.length / itemsPerPage);
+  const paginated = (activeTab === 'list' ? filtered : submittedRepertoires).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const stats = {
     total: registrations.length,
@@ -643,7 +665,7 @@ function AdminView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {paginatedData.map(r => (
+                  {paginated.map((r: any) => (
                     <tr key={r.id} className="hover:bg-white/[0.01] transition-colors">
                       <td className="px-8 py-5">
                         <div className="w-10 h-10 bg-indigo-600/10 border border-indigo-500/20 rounded-xl flex items-center justify-center font-black text-indigo-400 text-xs">
@@ -708,7 +730,7 @@ function AdminView() {
                       </td>
                     </tr>
                   ))}
-                  {paginatedData.length === 0 && (
+                  {paginated.length === 0 && (
                     <tr>
                       <td colSpan={5} className="px-8 py-8 text-center text-slate-500 text-sm font-medium">
                         No registrations found.
@@ -754,6 +776,83 @@ function AdminView() {
                   </div>
                 </div>
               </div>
+            </div>
+          ) : activeTab === 'repertoire' ? (
+            <div className="space-y-6">
+              <div className="flex items-center gap-3 border-b border-white/5 pb-6">
+                <Music size={24} className="text-indigo-400" />
+                <h3 className="text-2xl font-black text-white tracking-tight">Review Repertoires</h3>
+              </div>
+
+              {submittedSongs.length === 0 ? (
+                <div className="py-12 text-center text-slate-500">
+                  <p>No songs have been submitted for review yet.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-white/5">
+                        <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest">Soloist</th>
+                        <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[150px]">Song</th>
+                        <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Summary</th>
+                        <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginated.map((r: any) => {
+                        const status = r.song_status || 'pending';
+                        return (
+                          <tr key={r.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors group">
+                            <td className="py-4 px-4">
+                              <div className="font-bold text-white whitespace-nowrap">{r.full_name}</div>
+                              <div className="text-[10px] text-slate-500 mt-1 uppercase">Slot {r.slot_id} • {r.voice_part}</div>
+                            </td>
+                            <td className="py-4 px-4">
+                              <div className="font-bold text-indigo-400">{r.song_title}</div>
+                              <div className="text-xs text-slate-400 italic mt-1">{r.artist_composer}</div>
+                            </td>
+                            <td className="py-4 px-4 text-xs text-slate-400 leading-relaxed max-w-[300px] truncate group-hover:whitespace-normal group-hover:break-words">{r.song_summary || '—'}</td>
+                            <td className="py-4 px-4">
+                              <div className="flex items-center justify-end gap-2">
+                                {status === 'approved' ? (
+                                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                    <Check size={12} /> Approved
+                                  </span>
+                                ) : status === 'rejected' ? (
+                                  <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                    <X size={12} /> Rejected
+                                  </span>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => handleSongStatusUpdate(r.id, 'approved')}
+                                      className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg transition-colors border border-emerald-500/20" title="Approve">
+                                      <Check size={14} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleSongStatusUpdate(r.id, 'rejected')}
+                                      className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors border border-rose-500/20" title="Reject">
+                                      <X size={14} />
+                                    </button>
+                                  </>
+                                )}
+                                {status !== 'pending' && (
+                                  <button
+                                    onClick={() => handleSongStatusUpdate(r.id, 'pending')}
+                                    className="p-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-colors ml-2 text-[10px] uppercase font-bold" title="Reset to Pending">
+                                    Reset
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           ) : (
             <div className="max-w-md space-y-10 py-10">
@@ -1038,23 +1137,37 @@ function SongEntryView() {
                       <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Soloist</th>
                       <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Song Title</th>
                       <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[150px]">Artist / Composer</th>
-                      <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[250px]">Summary</th>
+                      <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Summary</th>
+                      <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap text-right">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {submittedRepertoires.map((r) => (
-                      <tr key={r.id} className="border-b border-slate-50 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
-                        <td className="py-4 px-4">
-                          <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-xs">
-                            S-{r.slot_id}
-                          </div>
-                        </td>
-                        <td className="py-4 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">{r.full_name}</td>
-                        <td className="py-4 px-4 font-bold text-indigo-500 dark:text-indigo-400">{r.song_title}</td>
-                        <td className="py-4 px-4 text-slate-600 dark:text-slate-300 italic">{r.artist_composer}</td>
-                        <td className="py-4 px-4 text-xs text-slate-500 leading-relaxed max-w-[300px] truncate group-hover:whitespace-normal group-hover:break-words transition-all">{r.song_summary || '—'}</td>
-                      </tr>
-                    ))}
+                    {submittedRepertoires.map((r) => {
+                      const status = r.song_status || 'pending';
+                      return (
+                        <tr key={r.id} className="border-b border-slate-50 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
+                          <td className="py-4 px-4">
+                            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-xs">
+                              S-{r.slot_id}
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">{r.full_name}</td>
+                          <td className="py-4 px-4 font-bold text-indigo-500 dark:text-indigo-400">{r.song_title}</td>
+                          <td className="py-4 px-4 text-slate-600 dark:text-slate-300 italic">{r.artist_composer}</td>
+                          <td className="py-4 px-4 text-xs text-slate-500 leading-relaxed max-w-[250px] truncate group-hover:whitespace-normal group-hover:break-words transition-all">{r.song_summary || '—'}</td>
+                          <td className="py-4 px-4 text-right">
+                            <span className={cn(
+                              "px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider whitespace-nowrap border",
+                              status === 'approved' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                                status === 'rejected' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
+                                  "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                            )}>
+                              {status}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
