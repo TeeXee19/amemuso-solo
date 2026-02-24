@@ -5,7 +5,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots } from './lib/db';
 import {
   Check, Loader2, Music, X,
-  ChevronRight, Search, Download, Settings, Grid,
+  ChevronRight, ChevronLeft, Search, Download, Settings, Grid,
   ChevronDown
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
@@ -393,6 +393,9 @@ function AdminView() {
   const [maxSlots, setMaxSlots] = useState(60);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [voicePartFilter, setVoicePartFilter] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const fetchData = async () => {
     try {
@@ -413,12 +416,20 @@ function AdminView() {
     return () => { supabase.removeChannel(sub); };
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, voicePartFilter, itemsPerPage]);
+
   if (loading) return <div className="h-screen flex items-center justify-center bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
-  const filtered = registrations.filter(r =>
-    r.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.voice_part.toLowerCase().includes(searchQuery.toLowerCase())
-  ).sort((a, b) => a.slot_id - b.slot_id);
+  const filtered = registrations.filter(r => {
+    const matchesSearch = r.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || r.voice_part.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesVoice = voicePartFilter === 'All' || r.voice_part === voicePartFilter;
+    return matchesSearch && matchesVoice;
+  }).sort((a, b) => a.slot_id - b.slot_id);
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleDownloadCSV = () => {
     if (registrations.length === 0) return;
@@ -447,30 +458,44 @@ function AdminView() {
     <Layout title="Dashboard Overview" subtitle="Administrator">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-12 glass p-8 rounded-[2.5rem] border-white/5 space-y-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             <div className="flex bg-[#0b0d17] p-1 rounded-2xl border border-white/5">
               <button onClick={() => setActiveTab('list')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'list' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500")}>Member List</button>
               <button onClick={() => setActiveTab('settings')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'settings' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500")}>App Settings</button>
             </div>
-            <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-              {activeTab === 'list' && (
+            {activeTab === 'list' && (
+              <div className="flex flex-col xl:flex-row gap-4 w-full lg:w-auto">
+                <div className="flex bg-[#0b0d17] p-1 rounded-xl border border-white/5 overflow-x-auto">
+                  {['All', ...VOICE_PARTS].map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setVoicePartFilter(p)}
+                      className={cn(
+                        "px-4 py-2 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all whitespace-nowrap",
+                        voicePartFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-white"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
                 <button
                   onClick={handleDownloadCSV}
                   className="flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
                 >
                   <Download size={16} /> Export CSV
                 </button>
-              )}
-              <div className="relative w-full md:w-80">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
-                <input
-                  placeholder="Search name or voice part..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full bg-[#0b0d17] border border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
-                />
+                <div className="relative w-full xl:w-64">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
+                  <input
+                    placeholder="Search name or voice part..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full bg-[#0b0d17] border border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {activeTab === 'list' ? (
@@ -485,7 +510,7 @@ function AdminView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {filtered.map(r => (
+                  {paginatedData.map(r => (
                     <tr key={r.id} className="hover:bg-white/[0.01] transition-colors">
                       <td className="px-8 py-5">
                         <div className="w-10 h-10 bg-indigo-600/10 border border-indigo-500/20 rounded-xl flex items-center justify-center font-black text-indigo-400 text-xs">
@@ -509,8 +534,52 @@ function AdminView() {
                       </td>
                     </tr>
                   ))}
+                  {paginatedData.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-8 py-8 text-center text-slate-500 text-sm font-medium">
+                        No registrations found.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-white/5 bg-[#0b0d17]/50">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                    className="bg-[#131521] border border-white/10 text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                    {filtered.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(p => p - 1)}
+                      className="p-2 bg-[#131521] border border-white/10 rounded-xl text-slate-400 hover:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <button
+                      disabled={currentPage === totalPages || totalPages === 0}
+                      onClick={() => setCurrentPage(p => p + 1)}
+                      className="p-2 bg-[#131521] border border-white/10 rounded-xl text-slate-400 hover:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="max-w-md space-y-10 py-10">
