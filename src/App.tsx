@@ -448,11 +448,11 @@ function AdminView() {
   const [voicePartFilter, setVoicePartFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editFullName, setEditFullName] = useState('');
   const [editVoicePart, setEditVoicePart] = useState('');
-  const [savingId, setSavingId] = useState<number | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -508,21 +508,23 @@ function AdminView() {
     try {
       await editRegistration(editingId, editFullName, editVoicePart);
       setEditingId(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert("Failed to save edits: " + (err.message || 'Unknown error. Check RLS policies.'));
     } finally {
       setSavingId(null);
     }
   };
 
-  const handleDeleteClick = async (id: number) => {
+  const handleDeleteClick = async (id: string) => {
     if (!window.confirm("Are you sure you want to completely remove this registration and free up the slot?")) return;
     setDeletingId(id);
     try {
       await deleteRegistration(id);
       // Wait for Supabase realtime to update the list
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert("Failed to delete registration: " + (err.message || 'Unknown error. Check RLS policies.'));
     } finally {
       setDeletingId(null);
     }

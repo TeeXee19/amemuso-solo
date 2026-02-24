@@ -30,6 +30,12 @@ CREATE POLICY "Public read registrations" ON registrations FOR SELECT USING (tru
 DROP POLICY IF EXISTS "Public insert registrations" ON registrations;
 CREATE POLICY "Public insert registrations" ON registrations FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Public update registrations" ON registrations;
+CREATE POLICY "Public update registrations" ON registrations FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Public delete registrations" ON registrations;
+CREATE POLICY "Public delete registrations" ON registrations FOR DELETE USING (true);
+
 -- Policies for config
 DROP POLICY IF EXISTS "Public read config" ON config;
 CREATE POLICY "Public read config" ON config FOR SELECT USING (true);
