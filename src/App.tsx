@@ -5,8 +5,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration } from './lib/db';
 import {
   Check, Loader2, Music, X, Edit2, Trash2, Sun, Moon, Monitor,
-  ChevronRight, ChevronLeft, Search, Download, Settings, Grid,
-  ChevronDown
+  ChevronRight, ChevronLeft, Search, Download, Settings, Grid
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -89,7 +88,16 @@ function Layout({ children, subtitle }: any) {
                 location.pathname === '/' ? "bg-slate-200 dark:bg-white/10 text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-white"
               )}
             >
-              Registration <ChevronDown size={14} className="opacity-40" />
+              Registration
+            </button>
+            <button
+              onClick={() => navigate('/roster')}
+              className={cn(
+                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                location.pathname === '/roster' ? "bg-slate-200 dark:bg-white/10 text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-white"
+              )}
+            >
+              Roster
             </button>
           </div>
 
@@ -764,6 +772,104 @@ function AdminView() {
   );
 }
 
+// --- Roster View ---
+
+const ROSTER_SCHEDULE = [
+  { date: '8th March', slots: [41, 43, 45, 47] },
+  { date: '15th March', slots: [1, 3, 5, 7] },
+  { date: '22nd March', slots: [10, 12, 14, 16] },
+  { date: '29th March', slots: [34, 36, 38, 40] },
+  { date: '12th April', slots: [58, 60, 62, 64] },
+  { date: '19th April', slots: [42, 44, 46, 48] },
+  { date: '26th April', slots: [25, 27, 29, 31] },
+  { date: '3rd May', slots: [26, 28, 30, 32] },
+  { date: '10th May', slots: [33, 35, 37, 39] },
+  { date: '17th May', slots: [57, 59, 61, 63] },
+  { date: '24th May', slots: [2, 4, 6, 8] },
+  { date: '31st May', slots: [18, 20, 22, 24] },
+  { date: '7th June', slots: [49, 51, 53, 55] },
+  { date: '14th June', slots: [50, 52, 54, 56] },
+  { date: '21st June', slots: [9, 11, 13, 15] },
+  { date: '28th June', slots: [17, 19, 21, 23] }
+];
+
+function RosterView() {
+  const [registrations, setRegistrations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    try {
+      const regs = await getRegistrations();
+      setRegistrations(regs);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+    fetchData();
+    const sub = supabase.channel('roster').on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, fetchData).subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, []);
+
+  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
+
+  return (
+    <Layout subtitle="Performance Roster">
+      <div className="glass p-8 md:p-12 rounded-[2.5rem] border-slate-200 dark:border-white/5 space-y-10 relative overflow-hidden">
+        <div className="text-center max-w-3xl mx-auto">
+          <h2 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4 italic">Roster for Compulsory Solo Performance 2026</h2>
+          <p className="text-slate-500 dark:text-slate-400 font-medium">Weekly performance schedule and assigned soloist slots.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {ROSTER_SCHEDULE.map((week, i) => (
+            <div key={i} className="bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-3xl p-6 shadow-sm dark:shadow-none flex flex-col hover:border-indigo-500/30 transition-colors">
+              <h3 className="text-xl font-black text-indigo-500 mb-6 pb-4 border-b border-slate-100 dark:border-white/5">{week.date}</h3>
+              <div className="space-y-4 flex-1">
+                {week.slots.map(slotId => {
+                  const reg = registrations.find(r => r.slot_id === slotId);
+                  return (
+                    <div key={slotId} className="flex items-start gap-4">
+                      <div className="w-10 h-10 shrink-0 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl flex items-center justify-center font-black text-slate-700 dark:text-slate-300 text-sm shadow-inner group transition-colors">
+                        {slotId}
+                      </div>
+                      <div className="flex flex-col justify-center min-h-[40px] w-full border-b border-slate-50 dark:border-white/5 pb-3 last:border-0 last:pb-0">
+                        {reg ? (
+                          <>
+                            <span className="font-bold text-slate-900 dark:text-white leading-tight break-words">{reg.full_name}</span>
+                            <span className={cn(
+                              "text-[9px] font-black uppercase tracking-widest mt-1.5 w-max px-2.5 py-1 rounded-md",
+                              reg.voice_part === 'Soprano' && "bg-rose-500/10 text-rose-500",
+                              reg.voice_part === 'Alto' && "bg-amber-500/10 text-amber-500",
+                              reg.voice_part === 'Tenor' && "bg-sky-500/10 text-sky-500",
+                              reg.voice_part === 'Bass' && "bg-emerald-500/10 text-emerald-500"
+                            )}>
+                              {reg.voice_part}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-sm font-medium text-slate-400 dark:text-slate-500 italic mt-1 pb-1">— Available —</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
 // --- Main App Entry ---
 
 export default function App() {
@@ -778,6 +884,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<PublicView />} />
         <Route path="/admin" element={<AdminView />} />
+        <Route path="/roster" element={<RosterView />} />
       </Routes>
     </BrowserRouter>
   );
