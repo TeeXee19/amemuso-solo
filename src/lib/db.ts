@@ -32,17 +32,25 @@ export const updateMaxSlots = async (newLimit: number) => {
 };
 
 export const editRegistration = async (id: string, fullName: string, voicePart: string) => {
-    const { error } = await supabase
+    const { data, error } = await supabase
         .from('registrations')
         .update({ full_name: fullName, voice_part: voicePart })
-        .eq('id', id);
+        .eq('id', id)
+        .select();
+
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error(`Missing record or RLS block. 0 rows updated for ID: ${id}`);
+    return data;
 };
 
 export const deleteRegistration = async (id: string) => {
-    const { error } = await supabase
+    const { data, error } = await supabase
         .from('registrations')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .select();
+
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error(`Missing record or RLS block. 0 rows deleted for ID: ${id}`);
+    return data;
 };
