@@ -5,7 +5,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires } from './lib/db';
 import {
   Check, Loader2, Music, X, Edit2, Trash2, Sun, Moon, Monitor,
-  ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink
+  ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -67,6 +67,7 @@ function Layout({ children, subtitle }: any) {
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem('theme-preference') as Theme) || 'system';
   });
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -93,7 +94,7 @@ function Layout({ children, subtitle }: any) {
           </Link>
         </div>
 
-        <nav className="flex items-center gap-2">
+        <nav className="hidden lg:flex items-center gap-2">
           {/* Theme Toggle */}
           <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5">
             <button
@@ -149,8 +150,79 @@ function Layout({ children, subtitle }: any) {
             </button>
           </div>
 
+          {/* User Nav */}
+          <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-white/5 relative group">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 p-[2px]">
+              <div className="w-full h-full rounded-full border-2 border-white dark:border-[#131521] overflow-hidden bg-slate-200 dark:bg-slate-800">
+                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=admin123&backgroundColor=transparent`} alt="User" />
+              </div>
+            </div>
+            <div className="hidden md:block">
+              <p className="text-xs font-bold text-slate-900 dark:text-white leading-none">Admin User</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">admin@amemuso.org</p>
+            </div>
+          </div>
         </nav>
+
+        {/* Mobile Hamburger Toggle */}
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="lg:hidden p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
+        >
+          {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+
       </header>
+
+      {/* Mobile Navigation Dropdown */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scaleY: 0.95 }}
+            animate={{ opacity: 1, y: 0, scaleY: 1 }}
+            exit={{ opacity: 0, y: -20, scaleY: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="lg:hidden absolute top-[73px] left-0 w-full bg-white/95 dark:bg-[#131521]/95 backdrop-blur-3xl border-b border-slate-200 dark:border-white/5 z-40 shadow-2xl origin-top"
+          >
+            <div className="flex flex-col p-6 gap-6">
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => { setIsMobileMenuOpen(false); navigate('/'); }}
+                  className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
+                >
+                  Roster
+                </button>
+                <button
+                  onClick={() => { setIsMobileMenuOpen(false); navigate('/register'); }}
+                  className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/register' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
+                >
+                  Registration
+                </button>
+                <button
+                  onClick={() => { setIsMobileMenuOpen(false); navigate('/repertoire'); }}
+                  className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/repertoire' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
+                >
+                  Repertoire
+                </button>
+              </div>
+
+              <div className="h-px w-full bg-slate-200 dark:bg-white/5" />
+
+              <div className="flex justify-between items-center bg-slate-50 dark:bg-[#0b0d17] p-2 rounded-2xl border border-slate-200 dark:border-white/5">
+                <button onClick={() => setTheme('light')} className={cn("flex-1 flex justify-center py-2 rounded-xl transition-all", theme === 'light' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500")}>
+                  <Sun size={18} />
+                </button>
+                <button onClick={() => setTheme('system')} className={cn("flex-1 flex justify-center py-2 rounded-xl transition-all", theme === 'system' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500")}>
+                  <Monitor size={18} />
+                </button>
+                <button onClick={() => setTheme('dark')} className={cn("flex-1 flex justify-center py-2 rounded-xl transition-all", theme === 'dark' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500")}>
+                  <Moon size={18} />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto custom-scrollbar relative">
@@ -600,7 +672,6 @@ function AdminView() {
 
   const handleSelectAllRepertoires = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      // NOTE: Using `filteredRepertoires` here (calculated further below) by recreating its logic for simplicity before hoisting
       const f = repertoires.filter(r => {
         const matchesSearch = r.registrations?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           r.song_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -608,18 +679,19 @@ function AdminView() {
         const matchesStatus = repertoireFilter === 'All' || (r.status || 'pending') === repertoireFilter.toLowerCase();
         return matchesSearch && matchesStatus;
       });
-      const p = f.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-      setSelectedRepertoires(p.map((r: any) => r.id));
+      // Group them to match page view
+      const groupedF = Object.values(f.reduce((acc, r: any) => {
+        if (!acc[r.registration_id]) acc[r.registration_id] = { registration_id: r.registration_id, songs: [] };
+        acc[r.registration_id].songs.push(r);
+        return acc;
+      }, {} as Record<string, any>)).sort((a: any, b: any) => a.songs[0].registrations?.slot_id - b.songs[0].registrations?.slot_id);
+
+      const p = groupedF.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+      // Select all song IDs within the displayed groups
+      const allDisplayedIds = p.flatMap((group: any) => group.songs.map((s: any) => s.id));
+      setSelectedRepertoires(allDisplayedIds);
     } else {
       setSelectedRepertoires([]);
-    }
-  };
-
-  const handleSelectRepertoire = (id: string) => {
-    if (selectedRepertoires.includes(id)) {
-      setSelectedRepertoires(selectedRepertoires.filter(r => r !== id));
-    } else {
-      setSelectedRepertoires([...selectedRepertoires, id]);
     }
   };
 
@@ -697,8 +769,22 @@ function AdminView() {
     return matchesSearch && matchesStatus;
   });
 
-  const totalPages = Math.ceil(activeTab === 'list' ? filtered.length / itemsPerPage : submittedRepertoires.length / itemsPerPage);
-  const paginated = (activeTab === 'list' ? filtered : submittedRepertoires).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const groupedSubmittedRepertoires = Object.values(
+    submittedRepertoires.reduce((acc, r: any) => {
+      if (!acc[r.registration_id]) {
+        acc[r.registration_id] = {
+          registration_id: r.registration_id,
+          registrations: r.registrations,
+          songs: []
+        };
+      }
+      acc[r.registration_id].songs.push(r);
+      return acc;
+    }, {} as Record<string, any>)
+  ).sort((a: any, b: any) => a.registrations?.slot_id - b.registrations?.slot_id);
+
+  const totalPages = Math.ceil(activeTab === 'list' ? filtered.length / itemsPerPage : groupedSubmittedRepertoires.length / itemsPerPage);
+  const paginated = (activeTab === 'list' ? filtered : groupedSubmittedRepertoires).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const stats = {
     total: registrations.length,
@@ -1033,7 +1119,14 @@ function AdminView() {
                         <th className="py-4 px-4 w-12">
                           <input
                             type="checkbox"
-                            checked={paginated.length > 0 && selectedRepertoires.length === paginated.length}
+                            checked={paginated.length > 0 && paginated.every((group: any) => group.songs.every((s: any) => selectedRepertoires.includes(s.id)))}
+                            ref={el => {
+                              if (el) {
+                                const allDisplayedSelected = paginated.length > 0 && paginated.every((group: any) => group.songs.every((s: any) => selectedRepertoires.includes(s.id)));
+                                const someDisplayedSelected = paginated.some((group: any) => group.songs.some((s: any) => selectedRepertoires.includes(s.id)));
+                                el.indeterminate = someDisplayedSelected && !allDisplayedSelected;
+                              }
+                            }}
                             onChange={handleSelectAllRepertoires}
                             className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
                           />
@@ -1044,74 +1137,93 @@ function AdminView() {
                         <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {paginated.map((r: any) => {
-                        const status = r.status || 'pending';
-                        return (
-                          <tr key={r.id} className={cn("border-b border-white/5 transition-colors group", selectedRepertoires.includes(r.id) ? "bg-indigo-500/5" : "hover:bg-white/[0.02]")}>
-                            <td className="py-4 px-4">
-                              <input
-                                type="checkbox"
-                                checked={selectedRepertoires.includes(r.id)}
-                                onChange={() => handleSelectRepertoire(r.id)}
-                                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
-                              />
-                            </td>
-                            <td className="py-4 px-4">
-                              <div className="font-bold text-white whitespace-nowrap">{r.registrations?.full_name}</div>
-                              <div className="text-[10px] text-slate-500 mt-1 uppercase">Slot {r.registrations?.slot_id} • {r.registrations?.voice_part}</div>
-                            </td>
-                            <td className="py-4 px-4">
-                              <div className="font-bold text-indigo-400">{r.song_title}</div>
-                              <div className="text-xs text-slate-400 italic mt-1">{r.artist_composer}</div>
-                            </td>
-                            <td className="py-4 px-4 text-xs text-slate-400 leading-relaxed max-w-[300px] truncate group-hover:whitespace-normal group-hover:break-words">
-                              {(r.song_link || r.score_link) && (
-                                <div className="flex gap-4 mb-2">
-                                  {r.song_link && <a href={r.song_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sky-400 hover:text-sky-300 transition-colors uppercase tracking-widest font-black text-[10px] bg-sky-500/10 px-2 py-0.5 rounded"><LinkIcon size={10} /> Audio</a>}
-                                  {r.score_link && <a href={r.score_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-rose-400 hover:text-rose-300 transition-colors uppercase tracking-widest font-black text-[10px] bg-rose-500/10 px-2 py-0.5 rounded"><ExternalLink size={10} /> Score</a>}
-                                </div>
-                              )}
-                              {r.song_summary}
-                            </td>
-                            <td className="py-4 px-4">
-                              <div className="flex items-center justify-end gap-2">
-                                {status === 'approved' ? (
-                                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                                    <Check size={12} /> Approved
-                                  </span>
-                                ) : status === 'rejected' ? (
-                                  <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                                    <X size={12} /> Rejected
-                                  </span>
-                                ) : (
+                    {paginated.map((group: any) => {
+                      const allSelected = group.songs.every((s: any) => selectedRepertoires.includes(s.id));
+                      const someSelected = group.songs.some((s: any) => selectedRepertoires.includes(s.id));
+
+                      return (
+                        <tbody key={group.registration_id} className={cn("border-b border-white/5 transition-colors group/body", someSelected ? "bg-indigo-500/5" : "hover:bg-white/[0.02]")}>
+                          {group.songs.map((r: any, idx: number) => {
+                            const status = r.status || 'pending';
+                            return (
+                              <tr key={r.id}>
+                                {idx === 0 && (
                                   <>
-                                    <button
-                                      onClick={() => handleApproveSong(r.id, r.registration_id)}
-                                      disabled={approvingId === r.id || rejectingId === r.id || deletingRepId === r.id}
-                                      className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg transition-colors border border-emerald-500/20 disabled:opacity-50" title="Approve">
-                                      {approvingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                                    </button>
-                                    <button
-                                      onClick={() => handleRejectSong(r.id)}
-                                      disabled={rejectingId === r.id || approvingId === r.id || deletingRepId === r.id}
-                                      className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors border border-rose-500/20 disabled:opacity-50" title="Reject">
-                                      {rejectingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteSong(r.id)}
-                                      disabled={deletingRepId === r.id || rejectingId === r.id || approvingId === r.id}
-                                      className="p-2 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-lg transition-colors border border-slate-500/20 disabled:opacity-50" title="Delete">
-                                      {deletingRepId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                                    </button>
+                                    <td rowSpan={group.songs.length} className="py-4 px-4 align-top w-12 border-r border-white/5">
+                                      <input
+                                        type="checkbox"
+                                        checked={allSelected}
+                                        ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
+                                        onChange={() => {
+                                          if (allSelected) {
+                                            setSelectedRepertoires(prev => prev.filter(id => !group.songs.find((s: any) => s.id === id)));
+                                          } else {
+                                            const newIds = group.songs.map((s: any) => s.id).filter((id: string) => !selectedRepertoires.includes(id));
+                                            setSelectedRepertoires(prev => [...prev, ...newIds]);
+                                          }
+                                        }}
+                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer mt-1"
+                                      />
+                                    </td>
+                                    <td rowSpan={group.songs.length} className="py-4 px-4 align-top border-r border-white/5">
+                                      <div className="font-bold text-white whitespace-nowrap mt-0.5">{group.registrations?.full_name}</div>
+                                      <div className="text-[10px] text-slate-500 mt-1 uppercase">Slot {group.registrations?.slot_id} • {group.registrations?.voice_part}</div>
+                                    </td>
                                   </>
                                 )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
+                                <td className={cn("py-4 px-4 align-top", idx !== 0 && "border-t border-white/5")}>
+                                  <div className="font-bold text-indigo-400">{r.song_title}</div>
+                                  <div className="text-xs text-slate-400 italic mt-1">{r.artist_composer}</div>
+                                </td>
+                                <td className={cn("py-4 px-4 text-xs text-slate-400 leading-relaxed max-w-[300px] break-words align-top", idx !== 0 && "border-t border-white/5")}>
+                                  {(r.song_link || r.score_link) && (
+                                    <div className="flex gap-4 mb-2">
+                                      {r.song_link && <a href={r.song_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sky-400 hover:text-sky-300 transition-colors uppercase tracking-widest font-black text-[10px] bg-sky-500/10 px-2 py-0.5 rounded"><LinkIcon size={10} /> Audio</a>}
+                                      {r.score_link && <a href={r.score_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-rose-400 hover:text-rose-300 transition-colors uppercase tracking-widest font-black text-[10px] bg-rose-500/10 px-2 py-0.5 rounded"><ExternalLink size={10} /> Score</a>}
+                                    </div>
+                                  )}
+                                  {r.song_summary}
+                                </td>
+                                <td className={cn("py-4 px-4 align-top", idx !== 0 && "border-t border-white/5")}>
+                                  <div className="flex items-center justify-end gap-2">
+                                    {status === 'approved' ? (
+                                      <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                        <Check size={12} /> Approved
+                                      </span>
+                                    ) : status === 'rejected' ? (
+                                      <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                        <X size={12} /> Rejected
+                                      </span>
+                                    ) : (
+                                      <>
+                                        <button
+                                          onClick={() => handleApproveSong(r.id, r.registration_id)}
+                                          disabled={approvingId === r.id || rejectingId === r.id || deletingRepId === r.id}
+                                          className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg transition-colors border border-emerald-500/20 disabled:opacity-50" title="Approve">
+                                          {approvingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                                        </button>
+                                        <button
+                                          onClick={() => handleRejectSong(r.id)}
+                                          disabled={rejectingId === r.id || approvingId === r.id || deletingRepId === r.id}
+                                          className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors border border-rose-500/20 disabled:opacity-50" title="Reject">
+                                          {rejectingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteSong(r.id)}
+                                          disabled={deletingRepId === r.id || rejectingId === r.id || approvingId === r.id}
+                                          className="p-2 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-lg transition-colors border border-slate-500/20 disabled:opacity-50" title="Delete">
+                                          {deletingRepId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      );
+                    })}
                   </table>
                   <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50">
                     <div className="flex items-center gap-3">
@@ -1381,8 +1493,22 @@ function SongEntryView() {
     return matchesSearch && matchesStatus;
   });
 
-  const totalPages = Math.ceil(filteredRepertoires.length / itemsPerPage);
-  const paginatedRepertoires = filteredRepertoires.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const groupedFilteredRepertoires = Object.values(
+    filteredRepertoires.reduce((acc, r: any) => {
+      if (!acc[r.registration_id]) {
+        acc[r.registration_id] = {
+          registration_id: r.registration_id,
+          registrations: r.registrations,
+          songs: []
+        };
+      }
+      acc[r.registration_id].songs.push(r);
+      return acc;
+    }, {} as Record<string, any>)
+  ).sort((a: any, b: any) => a.registrations?.slot_id - b.registrations?.slot_id);
+
+  const totalPages = Math.ceil(groupedFilteredRepertoires.length / itemsPerPage);
+  const paginatedRepertoires = groupedFilteredRepertoires.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   // Compute users who are "locked" from submitting
   // Users are locked if they have ANY repertoire with status 'pending' or 'approved'.
@@ -1583,42 +1709,52 @@ function SongEntryView() {
                       <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap text-right">Status</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {paginatedRepertoires.map((r) => {
-                      const status = r.status || 'pending';
-                      return (
-                        <tr key={r.id} className="border-b border-slate-50 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
-                          <td className="py-4 px-4">
-                            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-xs">
-                              S-{r.registrations?.slot_id}
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">{r.registrations?.full_name}</td>
-                          <td className="py-4 px-4 font-bold text-indigo-500 dark:text-indigo-400">{r.song_title}</td>
-                          <td className="py-4 px-4 text-slate-600 dark:text-slate-300 italic">{r.artist_composer}</td>
-                          <td className="py-4 px-4 text-xs text-slate-500 leading-relaxed max-w-[250px] truncate group-hover:whitespace-normal group-hover:break-words transition-all">
-                            {(r.song_link || r.score_link) && (
-                              <div className="flex gap-4 mb-2">
-                                {r.song_link && <a href={r.song_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sky-500 hover:text-sky-400 transition-colors uppercase tracking-widest font-black text-[10px] bg-sky-50 dark:bg-sky-500/10 px-2 py-0.5 rounded"><LinkIcon size={10} /> Audio</a>}
-                                {r.score_link && <a href={r.score_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-rose-500 hover:text-rose-400 transition-colors uppercase tracking-widest font-black text-[10px] bg-rose-50 dark:bg-rose-500/10 px-2 py-0.5 rounded"><ExternalLink size={10} /> Score</a>}
-                              </div>
-                            )}
-                            {r.song_summary || '—'}
-                          </td>
-                          <td className="py-4 px-4 text-right">
-                            <span className={cn(
-                              "px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider whitespace-nowrap border",
-                              status === 'approved' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
-                                status === 'rejected' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
-                                  "bg-amber-500/10 text-amber-500 border-amber-500/20"
-                            )}>
-                              {status}
-                            </span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
+                  {paginatedRepertoires.map((group: any) => {
+                    return (
+                      <tbody key={group.registration_id} className="border-b border-slate-50 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group/body">
+                        {group.songs.map((r: any, idx: number) => {
+                          const status = r.status || 'pending';
+                          return (
+                            <tr key={r.id}>
+                              {idx === 0 && (
+                                <>
+                                  <td rowSpan={group.songs.length} className="py-4 px-4 align-top w-12 border-r border-slate-50 dark:border-white/5">
+                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-xs">
+                                      S-{r.registrations?.slot_id}
+                                    </div>
+                                  </td>
+                                  <td rowSpan={group.songs.length} className="py-4 px-4 align-top border-r border-slate-50 dark:border-white/5 font-bold text-slate-900 dark:text-white whitespace-nowrap pt-5">
+                                    {r.registrations?.full_name}
+                                  </td>
+                                </>
+                              )}
+                              <td className={cn("py-4 px-4 align-top font-bold text-indigo-500 dark:text-indigo-400", idx !== 0 && "border-t border-slate-50 dark:border-white/5")}>{r.song_title}</td>
+                              <td className={cn("py-4 px-4 align-top text-slate-600 dark:text-slate-300 italic", idx !== 0 && "border-t border-slate-50 dark:border-white/5")}>{r.artist_composer}</td>
+                              <td className={cn("py-4 px-4 align-top text-xs text-slate-500 leading-relaxed max-w-[250px] truncate group-hover:whitespace-normal group-hover:break-words transition-all", idx !== 0 && "border-t border-slate-50 dark:border-white/5")}>
+                                {(r.song_link || r.score_link) && (
+                                  <div className="flex gap-4 mb-2">
+                                    {r.song_link && <a href={r.song_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sky-500 hover:text-sky-400 transition-colors uppercase tracking-widest font-black text-[10px] bg-sky-50 dark:bg-sky-500/10 px-2 py-0.5 rounded"><LinkIcon size={10} /> Audio</a>}
+                                    {r.score_link && <a href={r.score_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-rose-500 hover:text-rose-400 transition-colors uppercase tracking-widest font-black text-[10px] bg-rose-50 dark:bg-rose-500/10 px-2 py-0.5 rounded"><ExternalLink size={10} /> Score</a>}
+                                  </div>
+                                )}
+                                {r.song_summary || '—'}
+                              </td>
+                              <td className={cn("py-4 px-4 align-top text-right", idx !== 0 && "border-t border-slate-50 dark:border-white/5")}>
+                                <span className={cn(
+                                  "px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider whitespace-nowrap border mt-1 inline-block",
+                                  status === 'approved' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                                    status === 'rejected' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
+                                      "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                                )}>
+                                  {status}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    );
+                  })}
                 </table>
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-4 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50 mt-4 rounded-xl">
                   <div className="flex items-center gap-3">
@@ -1636,7 +1772,7 @@ function SongEntryView() {
 
                   <div className="flex items-center gap-4">
                     <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
-                      {filteredRepertoires.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, filteredRepertoires.length)} of {filteredRepertoires.length}
+                      {groupedFilteredRepertoires.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, groupedFilteredRepertoires.length)} of {groupedFilteredRepertoires.length}
                     </span>
                     <div className="flex items-center gap-2">
                       <button
