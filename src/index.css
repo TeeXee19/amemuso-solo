@@ -9,10 +9,11 @@
   --color-amber-500: #f59e0b;
 }
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   font-family: 'Inter', system-ui, sans-serif;
-  color-scheme: dark;
-  background-color: #0b0d17;
+  color-scheme: light dark;
 }
 
 body {
@@ -20,6 +21,10 @@ body {
   min-width: 320px;
   min-height: 100vh;
   overflow-x: hidden;
+  background-color: #f8fafc;
+}
+
+.dark body {
   background-color: #0b0d17;
 }
 

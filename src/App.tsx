@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration } from './lib/db';
 import {
-  Check, Loader2, Music, X, Edit2, Trash2,
+  Check, Loader2, Music, X, Edit2, Trash2, Sun, Moon, Monitor,
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid,
   ChevronDown
 } from 'lucide-react';
@@ -21,31 +21,72 @@ const VOICE_PARTS = ['Soprano', 'Alto', 'Tenor', 'Bass'];
 
 // --- Shared Layout ---
 
+type Theme = 'light' | 'dark' | 'system';
+
 function Layout({ children, subtitle }: any) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [theme, setTheme] = useState<Theme>(() => {
+    return (localStorage.getItem('theme-preference') as Theme) || 'system';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (isDark) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme-preference', theme);
+  }, [theme]);
 
   return (
-    <div className="min-h-screen bg-[#0b0d17] text-slate-100 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0d17] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col">
       {/* Top Navbar */}
-      <header className="px-8 py-4 flex justify-between items-center bg-[#131521]/80 backdrop-blur-xl border-b border-white/5 z-50">
+      <header className="px-8 py-4 flex justify-between items-center bg-white dark:bg-[#131521]/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/5 z-50 shadow-sm dark:shadow-none">
         <div className="flex items-center gap-4">
           <Link to="/" className="flex items-center gap-3 group">
-            <button className="text-slate-500 hover:text-white mr-2 flex items-center justify-center"><ChevronRight className="rotate-180" size={16} /></button>
+            <button className="text-slate-500 hover:text-slate-900 dark:text-white mr-2 flex items-center justify-center"><ChevronRight className="rotate-180" size={16} /></button>
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/40 group-hover:scale-105 transition-transform">
-              <Music className="text-white" size={20} />
+              <Music className="text-slate-900 dark:text-white" size={20} />
             </div>
-            <h1 className="text-2xl font-black tracking-tight text-white uppercase italic">AMEMUSO COMPULSORY Solo</h1>
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white uppercase italic">AMEMUSO COMPULSORY Solo</h1>
           </Link>
         </div>
 
         <nav className="flex items-center gap-2">
-          <div className="flex bg-[#0b0d17] p-1 rounded-xl border border-white/5 mr-4">
+          {/* Theme Toggle */}
+          <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5">
+            <button
+              onClick={() => setTheme('light')}
+              className={cn("p-2 rounded-lg transition-all", theme === 'light' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500 hover:text-slate-900 dark:hover:text-white")}
+              title="Light Mode"
+            >
+              <Sun size={14} />
+            </button>
+            <button
+              onClick={() => setTheme('system')}
+              className={cn("p-2 rounded-lg transition-all", theme === 'system' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500 hover:text-slate-900 dark:hover:text-white")}
+              title="System Theme"
+            >
+              <Monitor size={14} />
+            </button>
+            <button
+              onClick={() => setTheme('dark')}
+              className={cn("p-2 rounded-lg transition-all", theme === 'dark' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500 hover:text-slate-900 dark:hover:text-white")}
+              title="Dark Mode"
+            >
+              <Moon size={14} />
+            </button>
+          </div>
+
+          <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5 mr-4 ml-2">
             <button
               onClick={() => navigate('/')}
               className={cn(
                 "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
-                location.pathname === '/' ? "bg-white/10 text-white" : "text-slate-500 hover:text-white"
+                location.pathname === '/' ? "bg-slate-200 dark:bg-white/10 text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-white"
               )}
             >
               Registration <ChevronDown size={14} className="opacity-40" />
@@ -129,7 +170,7 @@ function PublicView() {
     }
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
   const stats = {
     reserved: registrations.length,
@@ -147,19 +188,19 @@ function PublicView() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Main Selection Area */}
         <div className="lg:col-span-8 space-y-8">
-          <div className="glass p-8 rounded-[2.5rem] border-white/5 space-y-8 relative overflow-hidden">
+          <div className="glass p-8 rounded-[2.5rem] border-slate-200 dark:border-white/5 space-y-8 relative overflow-hidden">
 
             {/* Header / Search Area */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10 w-full">
               <div>
-                <h2 className="text-4xl font-black text-white mb-2 tracking-tight">Pick Your Performance Slot</h2>
-                <p className="text-slate-400 text-sm">Select an available slots from the grid below.</p>
+                <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">Pick Your Performance Slot</h2>
+                <p className="text-slate-500 dark:text-slate-400 text-sm">Select an available slots from the grid below.</p>
               </div>
               <div className="relative w-full md:w-64">
                 <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
                 <input
                   placeholder="Search slot number..."
-                  className="w-full bg-[#0b0d17] border border-white/5 rounded-2xl pr-12 pl-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600"
+                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pr-12 pl-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600"
                 />
               </div>
             </div>
@@ -168,14 +209,14 @@ function PublicView() {
             <div className="flex flex-wrap items-center justify-between gap-6 z-10 relative">
               <div className="flex items-center gap-6">
                 {/* Voice part filters */}
-                <div className="flex bg-[#0b0d17] p-1 rounded-2xl border border-white/5">
+                <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-2xl border border-slate-200 dark:border-white/5">
                   {['All', ...VOICE_PARTS].map(p => (
                     <button
                       key={p}
                       onClick={() => setActiveVoiceTab(p)}
                       className={cn(
                         "px-6 py-2.5 rounded-xl text-xs font-bold transition-all",
-                        activeVoiceTab === p ? "bg-indigo-600 text-white/90 shadow-lg glow-indigo" : "text-slate-500 hover:text-white"
+                        activeVoiceTab === p ? "bg-indigo-600 text-white/90 shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
                       )}
                     >
                       {p}
@@ -188,25 +229,25 @@ function PublicView() {
 
               {/* Progress Bar styled as stacked discrete lines */}
               <div className="flex items-center gap-3">
-                <span className="text-xs font-black text-white">{currentPercentage}%</span>
+                <span className="text-xs font-black text-slate-900 dark:text-white">{currentPercentage}%</span>
                 <div className="flex gap-[2px] items-end h-3">
                   {Array.from({ length: 30 }).map((_, i) => (
-                    <div key={i} className={cn("w-[2px] rounded-sm", i < filledBars ? "bg-indigo-600 h-[12px]" : "bg-white/10 h-[8px]")} />
+                    <div key={i} className={cn("w-[2px] rounded-sm", i < filledBars ? "bg-indigo-600 h-[12px]" : "bg-slate-200 dark:bg-white/10 h-[8px]")} />
                   ))}
                 </div>
               </div>
             </div>
 
             {/* Info Row: Avail stats + Right search */}
-            <div className="flex items-center justify-between bg-[#0b0d17] border border-white/5 rounded-2xl p-4 z-10 relative">
-              <div className="text-[11px] font-bold text-slate-400 tracking-wide">
-                Available: <span className="text-white">{stats.available}</span> &nbsp;&nbsp;•&nbsp;&nbsp; Reserved: <span className="text-white">{stats.reserved}</span> &nbsp;&nbsp;•&nbsp;&nbsp; Total: <span className="text-white">{stats.total}</span>
+            <div className="flex items-center justify-between bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl p-4 z-10 relative">
+              <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-wide">
+                Available: <span className="text-slate-900 dark:text-white">{stats.available}</span> &nbsp;&nbsp;•&nbsp;&nbsp; Reserved: <span className="text-slate-900 dark:text-white">{stats.reserved}</span> &nbsp;&nbsp;•&nbsp;&nbsp; Total: <span className="text-slate-900 dark:text-white">{stats.total}</span>
               </div>
               <div className="relative w-full md:w-64 max-w-[200px]">
                 <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600" size={14} />
                 <input
                   placeholder="Search slot number..."
-                  className="w-full bg-[#131521] border border-white/5 rounded-xl pr-10 pl-4 py-2 text-xs focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600"
+                  className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl pr-10 pl-4 py-2 text-xs focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600"
                 />
               </div>
             </div>
@@ -217,7 +258,9 @@ function PublicView() {
                 const displayId = i + 1;
                 let isTaken = false;
                 if (isDemo && [12, 23, 40].includes(displayId)) isTaken = true;
-                if (!isDemo && registrations.some(r => r.slot_id === displayId)) isTaken = true;
+
+                const reg = !isDemo ? registrations.find(r => r.slot_id === displayId) : null;
+                if (!isDemo && reg) isTaken = true;
 
                 const isSelected = selectedSlot === displayId;
 
@@ -231,17 +274,26 @@ function PublicView() {
                       isSelected
                         ? "bg-indigo-600/10 border-indigo-500 text-indigo-400 glow-indigo"
                         : isTaken
-                          ? "bg-[#11131f]/50 border-[#11131f] text-slate-700"
-                          : "bg-[#11131f] border-transparent hover:border-white/10"
+                          ? "bg-slate-100 dark:bg-[#11131f]/50 border-[#11131f] text-slate-700"
+                          : "bg-slate-100 dark:bg-[#11131f] border-transparent hover:border-slate-300 dark:border-white/10"
                     )}
                   >
-                    <span className="text-[17px] font-black tracking-tight text-white group-disabled:text-slate-500 leading-none mt-1 mb-4">S-{displayId}</span>
+                    <div className="mt-1 mb-2 flex-1">
+                      <span className="text-[17px] font-black tracking-tight text-slate-900 dark:text-white group-disabled:text-slate-500 leading-none">S-{displayId}</span>
+                      {isTaken && reg && (
+                        <div className="mt-1.5">
+                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block truncate w-full" title={reg.full_name}>
+                            {reg.full_name}
+                          </span>
+                        </div>
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-1.5 mt-auto">
-                      <div className={cn("w-3.5 h-3.5 rounded-full flex items-center justify-center", isTaken ? "bg-amber-600/20 text-amber-500" : "bg-emerald-500/20 text-emerald-500")}>
+                      <div className={cn("w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0", isTaken ? "bg-amber-600/20 text-amber-500" : "bg-emerald-500/20 text-emerald-500")}>
                         {isTaken ? <div className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]" /> : <Check size={10} className="opacity-90" strokeWidth={3} />}
                       </div>
-                      <span className={cn("text-[10px] font-black uppercase tracking-wider", isTaken ? "text-amber-500/80" : "text-slate-400")}>{isTaken ? 'Reserved' : 'Available'}</span>
+                      <span className={cn("text-[10px] font-black uppercase tracking-wider truncate", isTaken ? "text-amber-500/80" : "text-slate-500 dark:text-slate-400")}>{isTaken ? 'Reserved' : 'Available'}</span>
                     </div>
                   </button>
                 );
@@ -267,20 +319,20 @@ function PublicView() {
                 initial={{ opacity: 0, y: 50, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 50, scale: 0.95 }}
-                className="fixed lg:static top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 lg:translate-x-0 lg:translate-y-0 w-[90%] max-w-md lg:w-auto lg:max-w-none lg:col-span-4 z-[101] lg:z-10 bg-[#0b0d17] lg:bg-transparent rounded-[2.5rem]"
+                className="fixed lg:static top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 lg:translate-x-0 lg:translate-y-0 w-[90%] max-w-md lg:w-auto lg:max-w-none lg:col-span-4 z-[101] lg:z-10 bg-slate-50 dark:bg-[#0b0d17] lg:bg-transparent rounded-[2.5rem]"
               >
-                <div className="glass p-8 rounded-[2.5rem] border border-white/10 lg:border-white/5 shadow-[0_0_50px_rgba(0,0,0,0.8)] lg:shadow-2xl relative overflow-hidden flex flex-col min-h-[500px]">
+                <div className="glass p-8 rounded-[2.5rem] border border-slate-300 dark:border-white/10 lg:border-slate-200 dark:border-white/5 shadow-[0_0_50px_rgba(0,0,0,0.8)] lg:shadow-2xl relative overflow-hidden flex flex-col min-h-[500px]">
                   {/* Top right purple glow matching the image */}
                   <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-indigo-600/20 blur-[100px] rounded-full pointer-events-none" />
 
                   <div className="flex justify-between items-center mb-6 px-2">
-                    <h3 className="text-lg font-black text-white">Selected Slot</h3>
+                    <h3 className="text-lg font-black text-slate-900 dark:text-white">Selected Slot</h3>
 
                     {/* Close button for mobile modal */}
                     <button
                       type="button"
                       onClick={() => setSelectedSlot(null)}
-                      className="lg:hidden p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                      className="lg:hidden p-2 rounded-full bg-slate-200/50 dark:bg-white/5 hover:bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white transition-colors"
                     >
                       <X size={18} />
                     </button>
@@ -297,8 +349,8 @@ function PublicView() {
                         <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center glow-emerald">
                           <Check size={40} className="text-slate-950" />
                         </div>
-                        <h4 className="text-xl font-black text-white uppercase italic">Reserved!</h4>
-                        <p className="text-xs text-slate-400">Your performance slot is confirmed.</p>
+                        <h4 className="text-xl font-black text-slate-900 dark:text-white uppercase italic">Reserved!</h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Your performance slot is confirmed.</p>
                       </motion.div>
                     ) : (
                       <motion.div
@@ -308,26 +360,26 @@ function PublicView() {
                         exit={{ opacity: 0, x: -20 }}
                         className="flex flex-col flex-1"
                       >
-                        <div className="p-6 bg-[#131521] border border-white/5 rounded-[1.5rem] relative overflow-hidden group shadow-[0_8px_30px_rgba(0,0,0,0.5)] mb-8">
+                        <div className="p-6 bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[1.5rem] relative overflow-hidden group shadow-[0_8px_30px_rgba(0,0,0,0.5)] mb-8">
                           <div className="flex items-center gap-5 relative z-10">
                             <div className="w-14 h-14 bg-indigo-600/20 rounded-[1.1rem] flex items-center justify-center text-indigo-400 border border-indigo-500/30">
                               <Grid size={24} />
                             </div>
                             <div className="flex flex-col">
-                              <h4 className="text-[28px] font-black text-white leading-none tracking-tight">S-{selectedSlot}</h4>
+                              <h4 className="text-[28px] font-black text-slate-900 dark:text-white leading-none tracking-tight">S-{selectedSlot}</h4>
                             </div>
                           </div>
                           <div className="mt-4 flex items-center gap-1.5 ml-1 relative z-10">
                             <div className="w-[18px] h-[18px] rounded-full flex items-center justify-center bg-emerald-500 shadow-lg shadow-emerald-500/30">
                               <Check size={12} className="text-black" strokeWidth={3} />
                             </div>
-                            <span className="text-[15px] font-medium text-slate-400 tracking-wide ml-1">Available</span>
+                            <span className="text-[15px] font-medium text-slate-500 dark:text-slate-400 tracking-wide ml-1">Available</span>
                           </div>
                         </div>
 
                         <form onSubmit={handleRegister} className="flex flex-col flex-1">
                           <div className="space-y-4 mb-8">
-                            <h5 className="text-[14px] font-bold text-white mb-4">Performer Details</h5>
+                            <h5 className="text-[14px] font-bold text-slate-900 dark:text-white mb-4">Performer Details</h5>
                             <div className="space-y-6">
                               <div className="space-y-2">
                                 <label className="text-[11px] font-medium text-slate-500 mb-1 block">Full Name</label>
@@ -336,13 +388,13 @@ function PublicView() {
                                   value={fullName}
                                   onChange={e => setFullName(e.target.value)}
                                   placeholder="e.g. Samuel Adewale"
-                                  className="w-full bg-[#131521] border border-white/5 rounded-xl px-5 py-3.5 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-medium text-white"
+                                  className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-5 py-3.5 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-medium text-slate-900 dark:text-white"
                                 />
                               </div>
 
                               <div className="space-y-2">
                                 <label className="text-[11px] font-medium text-slate-500 mb-1 block">Voice Part</label>
-                                <div className="flex flex-wrap gap-2 lg:flex-nowrap bg-[#131521] p-1.5 rounded-xl border border-white/5">
+                                <div className="flex flex-wrap gap-2 lg:flex-nowrap bg-white dark:bg-[#131521] p-1.5 rounded-xl border border-slate-200 dark:border-white/5">
                                   {VOICE_PARTS.map(p => (
                                     <button
                                       key={p}
@@ -425,7 +477,7 @@ function AdminView() {
     setCurrentPage(1);
   }, [searchQuery, voicePartFilter, itemsPerPage]);
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
   const filtered = registrations.filter(r => {
     const matchesSearch = r.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || r.voice_part.toLowerCase().includes(searchQuery.toLowerCase());
@@ -502,22 +554,22 @@ function AdminView() {
   return (
     <Layout title="Dashboard Overview" subtitle="Administrator">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-12 glass p-8 rounded-[2.5rem] border-white/5 space-y-8">
+        <div className="lg:col-span-12 glass p-8 rounded-[2.5rem] border-slate-200 dark:border-white/5 space-y-8">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-            <div className="flex bg-[#0b0d17] p-1 rounded-2xl border border-white/5">
+            <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-2xl border border-slate-200 dark:border-white/5">
               <button onClick={() => setActiveTab('list')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'list' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500")}>Member List</button>
               <button onClick={() => setActiveTab('settings')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'settings' ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500")}>App Settings</button>
             </div>
             {activeTab === 'list' && (
               <div className="flex flex-col xl:flex-row gap-4 w-full lg:w-auto">
-                <div className="flex bg-[#0b0d17] p-1 rounded-xl border border-white/5 overflow-x-auto">
+                <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5 overflow-x-auto">
                   {['All', ...VOICE_PARTS].map(p => (
                     <button
                       key={p}
                       onClick={() => setVoicePartFilter(p)}
                       className={cn(
                         "px-4 py-2 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all whitespace-nowrap",
-                        voicePartFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-white"
+                        voicePartFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
                       )}
                     >
                       {p}
@@ -536,7 +588,7 @@ function AdminView() {
                     placeholder="Search name or voice part..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    className="w-full bg-[#0b0d17] border border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
+                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
                   />
                 </div>
               </div>
@@ -546,7 +598,7 @@ function AdminView() {
           {/* Dashboard Stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {[
-              { label: 'Total', count: stats.total, color: 'text-white', bg: 'bg-indigo-600/20', border: 'border-indigo-500/30' },
+              { label: 'Total', count: stats.total, color: 'text-slate-900 dark:text-white', bg: 'bg-indigo-600/20', border: 'border-indigo-500/30' },
               { label: 'Soprano', count: stats.soprano, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
               { label: 'Alto', count: stats.alto, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
               { label: 'Tenor', count: stats.tenor, color: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20' },
@@ -554,15 +606,15 @@ function AdminView() {
             ].map((s, i) => (
               <div key={i} className={cn("p-4 rounded-3xl border flex flex-col justify-center items-center gap-1", s.bg, s.border)}>
                 <span className={cn("text-2xl font-black", s.color)}>{s.count}</span>
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{s.label}</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{s.label}</span>
               </div>
             ))}
           </div>
 
           {activeTab === 'list' ? (
-            <div className="overflow-x-auto rounded-3xl border border-white/5">
+            <div className="overflow-x-auto rounded-3xl border border-slate-200 dark:border-white/5">
               <table className="w-full text-left">
-                <thead className="bg-[#0b0d17] text-[10px] font-black uppercase text-slate-500 tracking-widest border-b border-white/5">
+                <thead className="bg-slate-50 dark:bg-[#0b0d17] text-[10px] font-black uppercase text-slate-500 tracking-widest border-b border-slate-200 dark:border-white/5">
                   <tr>
                     <th className="px-8 py-5">Slot</th>
                     <th className="px-8 py-5">Full Name</th>
@@ -584,10 +636,10 @@ function AdminView() {
                           <input
                             value={editFullName}
                             onChange={e => setEditFullName(e.target.value)}
-                            className="bg-[#131521] border border-indigo-500/50 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-indigo-400 w-full"
+                            className="bg-white dark:bg-[#131521] border border-indigo-500/50 rounded-lg px-3 py-1.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-400 w-full"
                           />
                         ) : (
-                          <span className="font-bold text-slate-200">{r.full_name}</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{r.full_name}</span>
                         )}
                       </td>
                       <td className="px-8 py-5">
@@ -595,7 +647,7 @@ function AdminView() {
                           <select
                             value={editVoicePart}
                             onChange={e => setEditVoicePart(e.target.value)}
-                            className="bg-[#131521] border border-indigo-500/50 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-indigo-400"
+                            className="bg-white dark:bg-[#131521] border border-indigo-500/50 rounded-lg px-2 py-1.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-400"
                           >
                             {VOICE_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
                           </select>
@@ -620,7 +672,7 @@ function AdminView() {
                             <button disabled={savingId === r.id} onClick={handleSaveEdit} className="p-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors">
                               {savingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                             </button>
-                            <button disabled={savingId === r.id} onClick={() => setEditingId(null)} className="p-1.5 bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 rounded-lg transition-colors">
+                            <button disabled={savingId === r.id} onClick={() => setEditingId(null)} className="p-1.5 bg-slate-500/10 text-slate-500 dark:text-slate-400 hover:bg-slate-500/20 rounded-lg transition-colors">
                               <X size={14} />
                             </button>
                           </div>
@@ -646,13 +698,13 @@ function AdminView() {
                   )}
                 </tbody>
               </table>
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-white/5 bg-[#0b0d17]/50">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50">
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
                   <select
                     value={itemsPerPage}
                     onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                    className="bg-[#131521] border border-white/10 text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                    className="bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
                   >
                     <option value={10}>10</option>
                     <option value={20}>20</option>
@@ -669,14 +721,14 @@ function AdminView() {
                     <button
                       disabled={currentPage === 1}
                       onClick={() => setCurrentPage(p => p - 1)}
-                      className="p-2 bg-[#131521] border border-white/10 rounded-xl text-slate-400 hover:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
+                      className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
                     >
                       <ChevronLeft size={16} />
                     </button>
                     <button
                       disabled={currentPage === totalPages || totalPages === 0}
                       onClick={() => setCurrentPage(p => p + 1)}
-                      className="p-2 bg-[#131521] border border-white/10 rounded-xl text-slate-400 hover:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
+                      className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
                     >
                       <ChevronRight size={16} />
                     </button>
@@ -689,7 +741,7 @@ function AdminView() {
               <div className="space-y-4">
                 <div className="flex items-center gap-3 mb-2">
                   <Settings size={18} className="text-indigo-400" />
-                  <h4 className="font-black text-white uppercase tracking-widest text-xs">Capacity Management</h4>
+                  <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">Capacity Management</h4>
                 </div>
                 <p className="text-xs text-slate-500 leading-relaxed px-1">Adjust the total number of registration slots available for this event.</p>
                 <div className="flex gap-4">
@@ -697,7 +749,7 @@ function AdminView() {
                     type="number"
                     value={maxSlots}
                     onChange={e => setMaxSlots(parseInt(e.target.value))}
-                    className="flex-1 bg-[#0b0d17] border border-white/5 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all font-bold"
+                    className="flex-1 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all font-bold"
                   />
                   <button onClick={() => updateMaxSlots(maxSlots)} className="px-8 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-500 transition-all uppercase tracking-tighter italic">Update</button>
                 </div>
