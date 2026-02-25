@@ -182,7 +182,7 @@ function Layout({ children, subtitle }: any) {
             animate={{ opacity: 1, y: 0, scaleY: 1 }}
             exit={{ opacity: 0, y: -20, scaleY: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="lg:hidden absolute top-[73px] left-0 w-full bg-white/95 dark:bg-[#131521]/95 backdrop-blur-3xl border-b border-slate-200 dark:border-white/5 z-40 shadow-2xl origin-top"
+            className="lg:hidden absolute top-[73px] left-0 w-full bg-white/95 dark:bg-[#131521]/95 backdrop-blur-3xl border-b border-slate-200 dark:border-white/5 z-40 shadow-2xl origin-top max-h-[calc(100vh-80px)] overflow-y-auto"
           >
             <div className="flex flex-col p-6 gap-6">
               <div className="flex flex-col gap-2">
@@ -284,6 +284,7 @@ function PublicView() {
     setSubmitting(true);
     try {
       await registerSoloist(fullName, voicePart, selectedSlot);
+      await fetchData(); // Immediate reload
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
@@ -630,6 +631,7 @@ function AdminView() {
     setApprovingId(submissionId);
     try {
       await approveRepertoire(submissionId, registrationId);
+      await fetchData(); // Immediate reload
     } catch (err: any) {
       console.error(err);
       alert("Failed to approve song: " + (err.message || 'Unknown error'));
@@ -642,6 +644,7 @@ function AdminView() {
     setRejectingId(submissionId);
     try {
       await rejectRepertoire(submissionId);
+      await fetchData(); // Immediate reload
     } catch (err: any) {
       console.error(err);
       alert("Failed to reject song: " + (err.message || 'Unknown error'));
@@ -659,6 +662,7 @@ function AdminView() {
         setDeletingRepId(submissionId);
         try {
           await deleteRepertoire(submissionId);
+          await fetchData(); // Immediate reload
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         } catch (err: any) {
           console.error(err);
@@ -704,6 +708,7 @@ function AdminView() {
         setBulkActionLoading(true);
         try {
           await Promise.all(selectedRepertoires.map(id => deleteRepertoire(id)));
+          await fetchData(); // Immediate reload
           setSelectedRepertoires([]);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         } catch (err: any) {
@@ -724,6 +729,7 @@ function AdminView() {
         const rep = repertoires.find(r => r.id === id);
         return approveRepertoire(id, rep.registration_id); // Safe assuming 'rep' exists
       }));
+      await fetchData(); // Immediate reload
       setSelectedRepertoires([]);
     } catch (err: any) {
       console.error(err);
@@ -742,6 +748,7 @@ function AdminView() {
         setBulkActionLoading(true);
         try {
           await deleteAllRepertoires();
+          await fetchData(); // Immediate reload
           setSelectedRepertoires([]);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         } catch (err: any) {
@@ -805,6 +812,7 @@ function AdminView() {
     setSavingId(editingId);
     try {
       await editRegistration(editingId, editFullName, editVoicePart);
+      await fetchData(); // Immediate reload
       setEditingId(null);
     } catch (err: any) {
       console.error(err);
@@ -819,7 +827,7 @@ function AdminView() {
     setDeletingId(id);
     try {
       await deleteRegistration(id);
-      // Wait for Supabase realtime to update the list
+      await fetchData(); // Immediate reload
     } catch (err: any) {
       console.error(err);
       alert("Failed to delete registration: " + (err.message || 'Unknown error. Check RLS policies.'));
@@ -1451,6 +1459,8 @@ function SongEntryView() {
       await Promise.all(songs.map(song =>
         addRepertoire(selectedRegId, song.title, song.artist, song.summary, song.songLink, song.scoreLink)
       ));
+
+      await fetchData(); // Immediate reload
 
       // Clear form
       setSelectedRegId('');
