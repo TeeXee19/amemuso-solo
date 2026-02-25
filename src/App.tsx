@@ -90,7 +90,7 @@ function Layout({ children, subtitle }: any) {
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/40 group-hover:scale-105 transition-transform">
               <Music className="text-slate-900 dark:text-white" size={20} />
             </div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white uppercase italic">AMEMUSO COMPULSORY Solo</h1>
+            <h1 className="text-md md:text-2xl font-black tracking-tight text-slate-900 dark:text-white uppercase italic">AMEMUSO COMPULSORY Solo</h1>
           </Link>
         </div>
 
