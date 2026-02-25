@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires } from './lib/db';
@@ -151,17 +151,19 @@ function Layout({ children, subtitle }: any) {
           </div>
 
           {/* User Nav */}
-          <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-white/5 relative group">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 p-[2px]">
-              <div className="w-full h-full rounded-full border-2 border-white dark:border-[#131521] overflow-hidden bg-slate-200 dark:bg-slate-800">
-                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=admin123&backgroundColor=transparent`} alt="User" />
+          {location.pathname.startsWith('/admin') && (
+            <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-white/5 relative group">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 p-[2px]">
+                <div className="w-full h-full rounded-full border-2 border-white dark:border-[#131521] overflow-hidden bg-slate-200 dark:bg-slate-800">
+                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=admin123&backgroundColor=transparent`} alt="User" />
+                </div>
+              </div>
+              <div className="hidden md:block">
+                <p className="text-xs font-bold text-slate-900 dark:text-white leading-none">Admin User</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">admin@amemusochoir.org</p>
               </div>
             </div>
-            <div className="hidden md:block">
-              <p className="text-xs font-bold text-slate-900 dark:text-white leading-none">Admin User</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">admin@amemuso.org</p>
-            </div>
-          </div>
+          )}
         </nav>
 
         {/* Mobile Hamburger Toggle */}
@@ -563,6 +565,110 @@ function PublicView() {
         </AnimatePresence>
       </div>
     </Layout>
+  );
+}
+
+// --- Login View ---
+
+function LoginView({ onLogin }: { onLogin: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    // Hardcoded credentials as requested
+    if (email === 'admin@amemusochoir.org' && password === 'Password@1') {
+      setTimeout(() => {
+        onLogin();
+        navigate('/admin');
+      }, 800);
+    } else {
+      setTimeout(() => {
+        setError('Invalid email or password');
+        setLoading(false);
+      }, 500);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0d17] flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-md"
+      >
+        <div className="glass p-10 rounded-[2.5rem] border-slate-200 dark:border-white/5 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-indigo-600/10 blur-[100px] rounded-full pointer-events-none" />
+
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-500/40 mb-6">
+              <Music className="text-white" size={32} />
+            </div>
+            <h2 className="text-3xl font-black text-slate-900 dark:text-white italic uppercase">Admin Access</h2>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Enter credentials to manage soloists</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">Email Address</label>
+              <input
+                required
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="admin@amemusochoir.org"
+                className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 text-slate-900 dark:text-white font-medium"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">Password</label>
+              <input
+                required
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 text-slate-900 dark:text-white font-medium"
+              />
+            </div>
+
+            {error && (
+              <motion.p
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-rose-500 text-xs font-bold text-center"
+              >
+                {error}
+              </motion.p>
+            )}
+
+            <button
+              disabled={loading}
+              type="submit"
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl transition-all shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-70 text-sm uppercase italic"
+            >
+              {loading ? <Loader2 size={18} className="animate-spin" /> : null}
+              {loading ? 'Authenticating...' : 'Sign In'}
+            </button>
+
+            <button
+              onClick={() => navigate('/')}
+              type="button"
+              className="w-full text-slate-500 hover:text-slate-900 dark:hover:text-white text-[11px] font-bold uppercase tracking-widest transition-colors"
+            >
+              Back to Roster
+            </button>
+          </form>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 
@@ -1815,9 +1921,16 @@ function SongEntryView() {
 // --- Main App Entry ---
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('is-admin-authenticated') === 'true';
+  });
+
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+    localStorage.setItem('is-admin-authenticated', 'true');
+  };
+
   if (!isSupabaseConfigured) {
-    // We fall through to allow the mock UI to show if needed for checking, 
-    // but the original had SetupGuide. We'll render PublicView in demo mode if no supabase.
     return <PublicView />;
   }
 
@@ -1825,7 +1938,11 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/register" element={<PublicView />} />
-        <Route path="/admin" element={<AdminView />} />
+        <Route
+          path="/admin"
+          element={isAuthenticated ? <AdminView /> : <Navigate to="/login" replace />}
+        />
+        <Route path="/login" element={<LoginView onLogin={handleLogin} />} />
         <Route path="/" element={<RosterView />} />
         <Route path="/repertoire" element={<SongEntryView />} />
       </Routes>
