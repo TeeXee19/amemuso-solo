@@ -1280,8 +1280,8 @@ function AdminView() {
                                       />
                                     </td>
                                     <td rowSpan={group.songs.length} className="py-4 px-4 align-top border-r border-white/5">
-                                      <div className="font-bold text-white whitespace-nowrap mt-0.5">{group.registrations?.full_name}</div>
-                                      <div className="text-[10px] text-slate-500 mt-1 uppercase">Slot {group.registrations?.slot_id} • {group.registrations?.voice_part}</div>
+                                      <div className="font-bold text-black dark:text-white whitespace-nowrap mt-0.5">{group.registrations?.full_name}</div>
+                                      <div className="text-[10px] text-black dark:text-slate-500 mt-1 uppercase">Slot {group.registrations?.slot_id} • {group.registrations?.voice_part}</div>
                                     </td>
                                   </>
                                 )}
