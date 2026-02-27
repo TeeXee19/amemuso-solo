@@ -810,14 +810,15 @@ function SoloistStatusView() {
 
   return (
     <Layout subtitle="Status Checker" isAuthenticated={false}>
-      <div className="max-w-2xl mx-auto space-y-8">
-        <div className="glass p-8 rounded-[2.5rem] border border-slate-200 dark:border-white/5 space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Search Panel */}
+        <div className="glass p-6 sm:p-8 rounded-[2.5rem] border border-slate-200 dark:border-white/5 space-y-6">
           <div className="text-center">
-            <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2 uppercase italic tracking-tight">Track Your Solo</h2>
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mb-2 uppercase italic tracking-tight">Track Your Solo</h2>
             <p className="text-slate-500 dark:text-slate-400 text-sm">Enter your name to check your registration and song status.</p>
           </div>
 
-          <form onSubmit={handleCheck} className="flex gap-4">
+          <form onSubmit={handleCheck} className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
               <input
@@ -830,10 +831,10 @@ function SoloistStatusView() {
             <button
               type="submit"
               disabled={loading}
-              className="px-8 bg-indigo-600 text-white font-black rounded-2xl shadow-lg shadow-indigo-500/30 transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50 flex items-center gap-2"
+              className="w-full sm:w-auto px-8 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-lg shadow-indigo-500/30 transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
-              Check
+              Check Status
             </button>
           </form>
 
@@ -842,36 +843,40 @@ function SoloistStatusView() {
               {error}
             </div>
           )}
+        </div>
 
-          {result && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {result.map((reg: any) => (
-                <motion.div
-                  key={reg.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[2rem] p-6 space-y-4 shadow-xl"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-xl font-black text-slate-900 dark:text-white leading-none tracking-tight">{reg.full_name}</h3>
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 mt-2">Slot S-{reg.slot_id}</p>
-                    </div>
-                    <div className="px-3 py-1 bg-indigo-600/10 border border-indigo-500/20 rounded-lg text-indigo-400 text-[10px] font-black uppercase tracking-wider">
-                      {reg.voice_part}
-                    </div>
+        {/* Results */}
+        {result && (
+          <div className="space-y-4">
+            {result.map((reg: any) => (
+              <motion.div
+                key={reg.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[2rem] overflow-hidden shadow-xl"
+              >
+                {/* Card Header */}
+                <div className="p-5 sm:p-6 bg-indigo-600/5 border-b border-slate-200 dark:border-white/5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white leading-tight tracking-tight break-words">{reg.full_name}</h3>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 mt-1">Slot S-{reg.slot_id}</p>
                   </div>
+                  <span className="shrink-0 px-3 py-1.5 bg-indigo-600/10 border border-indigo-500/20 rounded-xl text-indigo-400 text-[10px] font-black uppercase tracking-wider">
+                    {reg.voice_part}
+                  </span>
+                </div>
 
-                  {/* QR Pass Section */}
-                  <div className="bg-slate-50 dark:bg-white/5 rounded-2xl p-6 flex flex-col items-center gap-4 border border-slate-200 dark:border-white/5">
-                    <div className="bg-white p-3 rounded-2xl shadow-lg shadow-indigo-500/10">
+                <div className="p-5 sm:p-6 space-y-5">
+                  {/* QR Pass */}
+                  <div className="bg-slate-50 dark:bg-white/5 rounded-2xl p-5 flex flex-col sm:flex-row items-center gap-5 border border-slate-200 dark:border-white/5">
+                    <div className="bg-white p-3 rounded-2xl shadow-lg shadow-indigo-500/10 shrink-0">
                       <QRCodeCanvas
                         value={reg.id}
                         size={120}
                         level="H"
                         includeMargin={false}
                         imageSettings={{
-                          src: "https://amemuso.com/favicon.ico", // Hypothetical logo or placeholder
+                          src: "https://amemuso.com/favicon.ico",
                           x: undefined,
                           y: undefined,
                           height: 24,
@@ -880,18 +885,23 @@ function SoloistStatusView() {
                         }}
                       />
                     </div>
-                    <div className="text-center">
-                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-900 dark:text-white">Check-in Pass</p>
-                      <p className="text-[9px] text-slate-500 font-medium">Present this at the venue</p>
+                    <div className="text-center sm:text-left">
+                      <p className="text-xs font-black uppercase tracking-[0.15em] text-slate-900 dark:text-white">Check-in Pass</p>
+                      <p className="text-[11px] text-slate-500 font-medium mt-1 leading-relaxed">Present this QR code at the venue entrance for check-in.</p>
+                      <div className="mt-3 px-3 py-1.5 bg-indigo-600/10 border border-indigo-500/20 rounded-lg inline-flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">S-{reg.slot_id} • {reg.voice_part}</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  {/* Repertoire Status */}
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Repertoire Status</span>
-                      <div className="w-24 h-1 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
+                      <div className="w-24 h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
                         <div className={cn(
-                          "h-full transition-all duration-500",
+                          "h-full transition-all duration-500 rounded-full",
                           reg.repertoire_submissions?.some((s: any) => s.status === 'approved') ? "w-full bg-emerald-500" :
                             reg.repertoire_submissions?.length > 0 ? "w-1/2 bg-amber-500" : "w-0"
                         )} />
@@ -899,19 +909,19 @@ function SoloistStatusView() {
                     </div>
 
                     {reg.repertoire_submissions && reg.repertoire_submissions.length > 0 ? (
-                      <div className="space-y-3">
+                      <div className="space-y-2">
                         {reg.repertoire_submissions.map((sub: any) => (
                           <div key={sub.id} className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5">
                             <div className="flex justify-between items-start gap-3">
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{sub.song_title}</p>
-                                <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{sub.artist || 'N/A'}</p>
+                                <p className="text-xs font-bold text-slate-900 dark:text-white break-words">{sub.song_title}</p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{sub.artist_composer || 'N/A'}</p>
                               </div>
                               <span className={cn(
-                                "shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest",
-                                sub.status === 'approved' ? "bg-emerald-500/10 text-emerald-500" :
-                                  sub.status === 'rejected' ? "bg-rose-500/10 text-rose-500" :
-                                    "bg-amber-500/10 text-amber-500"
+                                "shrink-0 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border",
+                                sub.status === 'approved' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                                  sub.status === 'rejected' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
+                                    "bg-amber-500/10 text-amber-500 border-amber-500/20"
                               )}>
                                 {sub.status || 'pending'}
                               </span>
@@ -921,7 +931,7 @@ function SoloistStatusView() {
                                 <p className="text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-tighter flex items-center gap-1">
                                   <Music size={10} /> Admin Feedback
                                 </p>
-                                <p className="text-[10px] text-slate-500 italic">{sub.admin_comments}</p>
+                                <p className="text-[10px] text-slate-500 italic leading-relaxed">{sub.admin_comments}</p>
                               </div>
                             )}
                           </div>
@@ -934,11 +944,11 @@ function SoloistStatusView() {
                       </div>
                     )}
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </div>
     </Layout>
   );
