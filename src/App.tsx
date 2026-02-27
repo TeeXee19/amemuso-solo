@@ -721,7 +721,7 @@ function LoginView({ onLogin }: { onLogin: () => void }) {
               required
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="admin@amemusochoir.org"
+              placeholder="Enter Email Address"
               className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-bold"
             />
           </div>
