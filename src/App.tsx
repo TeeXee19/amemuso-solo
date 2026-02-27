@@ -1,11 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { QRCodeCanvas } from 'qrcode.react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
-import { getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires } from './lib/db';
+import {
+  getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires, updatePerformanceStatus, resetPerformanceStatus,
+  getPerformanceWeeks,
+  getWaitlist, joinWaitlist, deleteWaitlistEntry, getAdminUser
+} from './lib/db';
 import {
   Check, Loader2, Music, X, Edit2, Trash2, Sun, Moon, Monitor,
-  ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu
+  ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -61,7 +66,7 @@ function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading }: a
 
 type Theme = 'light' | 'dark' | 'system';
 
-function Layout({ children, subtitle }: any) {
+function Layout({ children, subtitle, isAuthenticated, onLogout }: any) {
   const navigate = useNavigate();
   const location = useLocation();
   const [theme, setTheme] = useState<Theme>(() => {
@@ -151,85 +156,94 @@ function Layout({ children, subtitle }: any) {
           </div>
 
           {/* User Nav */}
-          {location.pathname.startsWith('/admin') && (
+          {isAuthenticated && location.pathname.startsWith('/admin') && (
             <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-white/5 relative group">
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 p-[2px]">
                 <div className="w-full h-full rounded-full border-2 border-white dark:border-[#131521] overflow-hidden bg-slate-200 dark:bg-slate-800">
                   <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=admin123&backgroundColor=transparent`} alt="User" />
-                </div>
-              </div>
+                </div >
+              </div >
               <div className="hidden md:block">
                 <p className="text-xs font-bold text-slate-900 dark:text-white leading-none">Admin User</p>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400">admin@amemusochoir.org</p>
               </div>
-            </div>
+              <button
+                onClick={onLogout}
+                className="ml-2 p-2 text-slate-500 hover:text-rose-500 transition-colors"
+                title="Logout"
+              >
+                <X size={14} />
+              </button>
+            </div >
           )}
-        </nav>
+        </nav >
 
         {/* Mobile Hamburger Toggle */}
-        <button
+        < button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="lg:hidden p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
         >
           {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        </button >
 
-      </header>
+      </header >
 
       {/* Mobile Navigation Dropdown */}
       <AnimatePresence>
-        {isMobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, scaleY: 0.95 }}
-            animate={{ opacity: 1, y: 0, scaleY: 1 }}
-            exit={{ opacity: 0, y: -20, scaleY: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className="lg:hidden absolute top-[73px] left-0 w-full bg-white/95 dark:bg-[#131521]/95 backdrop-blur-3xl border-b border-slate-200 dark:border-white/5 z-40 shadow-2xl origin-top max-h-[calc(100vh-80px)] overflow-y-auto"
-          >
-            <div className="flex flex-col p-6 gap-6">
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => { setIsMobileMenuOpen(false); navigate('/'); }}
-                  className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
-                >
-                  Roster
-                </button>
-                <button
-                  onClick={() => { setIsMobileMenuOpen(false); navigate('/register'); }}
-                  className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/register' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
-                >
-                  Registration
-                </button>
-                <button
-                  onClick={() => { setIsMobileMenuOpen(false); navigate('/repertoire'); }}
-                  className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/repertoire' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
-                >
-                  Repertoire
-                </button>
-              </div>
+        {
+          isMobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scaleY: 0.95 }}
+              animate={{ opacity: 1, y: 0, scaleY: 1 }}
+              exit={{ opacity: 0, y: -20, scaleY: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="lg:hidden absolute top-[73px] left-0 w-full bg-white/95 dark:bg-[#131521]/95 backdrop-blur-3xl border-b border-slate-200 dark:border-white/5 z-40 shadow-2xl origin-top max-h-[calc(100vh-80px)] overflow-y-auto"
+            >
+              <div className="flex flex-col p-6 gap-6">
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => { setIsMobileMenuOpen(false); navigate('/'); }}
+                    className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
+                  >
+                    Roster
+                  </button>
+                  <button
+                    onClick={() => { setIsMobileMenuOpen(false); navigate('/register'); }}
+                    className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/register' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
+                  >
+                    Registration
+                  </button>
+                  <button
+                    onClick={() => { setIsMobileMenuOpen(false); navigate('/repertoire'); }}
+                    className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/repertoire' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
+                  >
+                    Repertoire
+                  </button>
+                </div>
 
-              <div className="h-px w-full bg-slate-200 dark:bg-white/5" />
+                <div className="h-px w-full bg-slate-200 dark:bg-white/5" />
 
-              <div className="flex justify-between items-center bg-slate-50 dark:bg-[#0b0d17] p-2 rounded-2xl border border-slate-200 dark:border-white/5">
-                <button onClick={() => setTheme('light')} className={cn("flex-1 flex justify-center py-2 rounded-xl transition-all", theme === 'light' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500")}>
-                  <Sun size={18} />
-                </button>
-                <button onClick={() => setTheme('system')} className={cn("flex-1 flex justify-center py-2 rounded-xl transition-all", theme === 'system' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500")}>
-                  <Monitor size={18} />
-                </button>
-                <button onClick={() => setTheme('dark')} className={cn("flex-1 flex justify-center py-2 rounded-xl transition-all", theme === 'dark' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500")}>
-                  <Moon size={18} />
-                </button>
+                <div className="flex justify-between items-center bg-slate-50 dark:bg-[#0b0d17] p-2 rounded-2xl border border-slate-200 dark:border-white/5">
+                  <button onClick={() => setTheme('light')} className={cn("flex-1 flex justify-center py-2 rounded-xl transition-all", theme === 'light' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500")}>
+                    <Sun size={18} />
+                  </button>
+                  <button onClick={() => setTheme('system')} className={cn("flex-1 flex justify-center py-2 rounded-xl transition-all", theme === 'system' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500")}>
+                    <Monitor size={18} />
+                  </button>
+                  <button onClick={() => setTheme('dark')} className={cn("flex-1 flex justify-center py-2 rounded-xl transition-all", theme === 'dark' ? "bg-white text-indigo-500 shadow-sm dark:bg-white/10 dark:text-indigo-400" : "text-slate-500")}>
+                    <Moon size={18} />
+                  </button>
+                </div>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )
+        }
+      </AnimatePresence >
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+      < div className="flex-1 overflow-y-auto custom-scrollbar relative" >
         {/* Background Decor */}
-        <div className="fixed top-0 right-0 w-[50%] h-[50%] bg-indigo-600/5 blur-[120px] rounded-full -z-10" />
+        < div className="fixed top-0 right-0 w-[50%] h-[50%] bg-indigo-600/5 blur-[120px] rounded-full -z-10" />
         <div className="fixed bottom-0 left-0 w-[50%] h-[50%] bg-emerald-600/5 blur-[120px] rounded-full -z-10" />
 
         <div className="max-w-[1600px] mx-auto px-10 py-10">
@@ -238,8 +252,8 @@ function Layout({ children, subtitle }: any) {
           </div>
           {children}
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }
 
@@ -247,20 +261,34 @@ function Layout({ children, subtitle }: any) {
 
 function PublicView() {
   const [activeVoiceTab, setActiveVoiceTab] = useState('All');
-  const [maxSlots, setMaxSlots] = useState(50);
+  const [maxSlots, setMaxSlots] = useState(70);
   const [registrations, setRegistrations] = useState<any[]>([]);
+  const [selectedWeekId, setSelectedWeekId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedSlot, setSelectedSlot] = useState<number | null>(null); // Start empty
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [fullName, setFullName] = useState('');
-  const [voicePart, setVoicePart] = useState(''); // No default voice part
+  const [voicePart, setVoicePart] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
   const fetchData = async () => {
     try {
-      const [configs, regs] = await Promise.all([getConfigs(), getRegistrations()]);
+      const [configs, regs, weeks] = await Promise.all([
+        getConfigs(),
+        getRegistrations(),
+        getPerformanceWeeks()
+      ]);
       if (configs.max_slots) setMaxSlots(parseInt(configs.max_slots));
-      setRegistrations(regs);
+      // Filter out test registrations for the public view
+      setRegistrations(regs.filter((r: any) => !r.is_test));
+      const publicWeeks = weeks.filter((w: any) => !w.is_test);
+
+      // Auto-select the first week if none selected
+      if (!selectedWeekId && publicWeeks.length > 0) {
+        setSelectedWeekId(publicWeeks[0].id);
+      }
     } catch (err) {
       console.error('Connection Error:', err);
     } finally {
@@ -282,10 +310,18 @@ function PublicView() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSlot || !fullName.trim() || !voicePart || !isSupabaseConfigured) return;
+    const isWaitlist = stats.available <= 0;
+
+    if (!isWaitlist && !selectedSlot) return;
+    if (!fullName.trim() || !voicePart || !isSupabaseConfigured) return;
+
     setSubmitting(true);
     try {
-      await registerSoloist(fullName, voicePart, selectedSlot);
+      if (isWaitlist) {
+        await joinWaitlist(fullName, voicePart, email, phone);
+      } else {
+        await registerSoloist(fullName, voicePart, selectedSlot!);
+      }
       await fetchData(); // Immediate reload
       setSuccess(true);
       setTimeout(() => {
@@ -293,6 +329,8 @@ function PublicView() {
         setSelectedSlot(null);
         setFullName('');
         setVoicePart('');
+        setEmail('');
+        setPhone('');
       }, 3000);
     } catch (err: any) {
       console.error('Failed to sync with server:', err);
@@ -312,10 +350,10 @@ function PublicView() {
   const currentPercentage = stats.total > 0 ? Math.round((stats.reserved / stats.total) * 100) : 0;
   const filledBars = Math.round((currentPercentage / 100) * 30);
 
-  const isDemo = !isSupabaseConfigured;
+  // Supabase is configured
 
   return (
-    <Layout subtitle="Management System">
+    <Layout subtitle="Management System" isAuthenticated={false}>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Main Selection Area */}
         <div className="lg:col-span-8 space-y-8">
@@ -324,8 +362,14 @@ function PublicView() {
             {/* Header / Search Area */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10 w-full">
               <div>
-                <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">Pick Your Performance Slot</h2>
-                <p className="text-slate-500 dark:text-slate-400 text-sm">Select an available slots from the grid below.</p>
+                <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">
+                  {stats.available > 0 ? 'Pick Your Performance Slot' : 'Registration is Full!'}
+                </h2>
+                <p className="text-slate-500 dark:text-slate-400 text-sm">
+                  {stats.available > 0
+                    ? 'Select an available slots from the grid below.'
+                    : 'All slots have been reserved. You can still join the waitlist below.'}
+                </p>
               </div>
               <div className="relative w-full md:w-64">
                 <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
@@ -385,32 +429,31 @@ function PublicView() {
 
             {/* Slot Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-8 gap-4 z-10 relative">
-              {Array.from({ length: maxSlots }, (_, i) => {
-                const displayId = i + 1;
-                let isTaken = false;
-                if (isDemo && [12, 23, 40].includes(displayId)) isTaken = true;
+              {Array.from({ length: maxSlots }).map((_, i) => {
+                const slotId = i + 1;
+                const reg = registrations.find(r => r.slot_id === slotId);
+                const isTaken = !!reg;
+                const isSelected = selectedSlot === slotId;
 
-                const reg = !isDemo ? registrations.find(r => r.slot_id === displayId) : null;
-                if (!isDemo && reg) isTaken = true;
-
-                const isSelected = selectedSlot === displayId;
+                // Filter by voice part if tab selected
+                if (activeVoiceTab !== 'All' && isTaken && reg.voice_part !== activeVoiceTab) return null;
 
                 return (
                   <button
-                    key={i}
+                    key={slotId}
                     disabled={isTaken}
-                    onClick={() => setSelectedSlot(displayId)}
+                    onClick={() => setSelectedSlot(slotId)}
                     className={cn(
                       "group p-4 rounded-[1.2rem] border-2 transition-all flex flex-col items-start gap-1 text-left relative overflow-hidden",
                       isSelected
                         ? "bg-indigo-600/10 border-indigo-500 text-indigo-400 glow-indigo"
                         : isTaken
-                          ? "bg-slate-100 dark:bg-[#11131f]/50 border-[#11131f] text-slate-700"
+                          ? "bg-slate-100 dark:bg-[#11131f]/50 border-[#11131f] text-slate-700 font-bold"
                           : "bg-slate-100 dark:bg-[#11131f] border-transparent hover:border-slate-300 dark:border-white/10"
                     )}
                   >
                     <div className="mt-1 mb-2 flex-1">
-                      <span className="text-[17px] font-black tracking-tight text-slate-900 dark:text-white group-disabled:text-slate-500 leading-none">S-{displayId}</span>
+                      <span className="text-[17px] font-black tracking-tight text-slate-900 dark:text-white group-disabled:text-slate-500 leading-none">S-{slotId}</span>
                       {isTaken && reg && (
                         <div className="mt-1.5">
                           <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block truncate w-full" title={reg.full_name}>
@@ -435,7 +478,7 @@ function PublicView() {
 
         {/* Sidebar Details / Form (Modal on mobile) */}
         <AnimatePresence>
-          {selectedSlot && (
+          {(selectedSlot || stats.available <= 0) && (
             <>
               {/* Mobile overlay backdrop */}
               <motion.div
@@ -457,7 +500,9 @@ function PublicView() {
                   <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-indigo-600/20 blur-[100px] rounded-full pointer-events-none" />
 
                   <div className="flex justify-between items-center mb-6 px-2">
-                    <h3 className="text-lg font-black text-slate-900 dark:text-white">Selected Slot</h3>
+                    <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                      {stats.available > 0 ? 'Selected Slot' : 'Join the Waitlist'}
+                    </h3>
 
                     {/* Close button for mobile modal */}
                     <button
@@ -480,8 +525,14 @@ function PublicView() {
                         <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center glow-emerald">
                           <Check size={40} className="text-slate-950" />
                         </div>
-                        <h4 className="text-xl font-black text-slate-900 dark:text-white uppercase italic">Reserved!</h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Your performance slot is confirmed.</p>
+                        <h4 className="text-xl font-black text-slate-900 dark:text-white uppercase italic">
+                          {stats.available > 0 ? 'Reserved!' : 'Waitlisted!'}
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {stats.available > 0
+                            ? 'Your performance slot is confirmed.'
+                            : 'You have been added to the queue if a slot opens up.'}
+                        </p>
                       </motion.div>
                     ) : (
                       <motion.div
@@ -491,49 +542,85 @@ function PublicView() {
                         exit={{ opacity: 0, x: -20 }}
                         className="flex flex-col flex-1"
                       >
-                        <div className="p-6 bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[1.5rem] relative overflow-hidden group shadow-[0_8px_30px_rgba(0,0,0,0.5)] mb-8">
-                          <div className="flex items-center gap-5 relative z-10">
-                            <div className="w-14 h-14 bg-indigo-600/20 rounded-[1.1rem] flex items-center justify-center text-indigo-400 border border-indigo-500/30">
-                              <Grid size={24} />
+                        {stats.available > 0 ? (
+                          <div className="p-6 bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[1.5rem] relative overflow-hidden group shadow-[0_8px_30px_rgba(0,0,0,0.5)] mb-8">
+                            <div className="flex items-center gap-5 relative z-10">
+                              <div className="w-14 h-14 bg-indigo-600/20 rounded-[1.1rem] flex items-center justify-center text-indigo-400 border border-indigo-500/30">
+                                <Grid size={24} />
+                              </div>
+                              <div className="flex flex-col">
+                                <h4 className="text-[28px] font-black text-slate-900 dark:text-white leading-none tracking-tight">S-{selectedSlot}</h4>
+                              </div>
                             </div>
-                            <div className="flex flex-col">
-                              <h4 className="text-[28px] font-black text-slate-900 dark:text-white leading-none tracking-tight">S-{selectedSlot}</h4>
+                            <div className="mt-4 flex items-center gap-1.5 ml-1 relative z-10">
+                              <div className="w-[18px] h-[18px] rounded-full flex items-center justify-center bg-emerald-500 shadow-lg shadow-emerald-500/30">
+                                <Check size={12} className="text-black" strokeWidth={3} />
+                              </div>
+                              <span className="text-[15px] font-medium text-slate-500 dark:text-slate-400 tracking-wide ml-1">Available</span>
                             </div>
                           </div>
-                          <div className="mt-4 flex items-center gap-1.5 ml-1 relative z-10">
-                            <div className="w-[18px] h-[18px] rounded-full flex items-center justify-center bg-emerald-500 shadow-lg shadow-emerald-500/30">
-                              <Check size={12} className="text-black" strokeWidth={3} />
+                        ) : (
+                          <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-[1.5rem] relative overflow-hidden mb-8">
+                            <div className="flex items-center gap-4 relative z-10">
+                              <div className="w-12 h-12 bg-rose-500/20 rounded-[1.1rem] flex items-center justify-center text-rose-500 border border-rose-500/30 font-black">
+                                W
+                              </div>
+                              <div>
+                                <h4 className="text-xl font-black text-rose-500 uppercase italic tracking-tighter">Waitlist Entry</h4>
+                                <p className="text-[10px] text-rose-500/80 font-bold uppercase tracking-widest">Overflow Active</p>
+                              </div>
                             </div>
-                            <span className="text-[15px] font-medium text-slate-500 dark:text-slate-400 tracking-wide ml-1">Available</span>
                           </div>
-                        </div>
+                        )}
 
                         <form onSubmit={handleRegister} className="flex flex-col flex-1">
                           <div className="space-y-4 mb-8">
                             <h5 className="text-[14px] font-bold text-slate-900 dark:text-white mb-4">Performer Details</h5>
-                            <div className="space-y-6">
-                              <div className="space-y-2">
-                                <label className="text-[11px] font-medium text-slate-500 mb-1 block">Full Name</label>
+                            <div className="space-y-4">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1 block">Full Name</label>
                                 <input
                                   required
                                   value={fullName}
                                   onChange={e => setFullName(e.target.value)}
                                   placeholder="e.g. Samuel Adewale"
-                                  className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-5 py-3.5 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-medium text-slate-900 dark:text-white"
+                                  className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-5 py-3 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-medium text-slate-900 dark:text-white"
                                 />
                               </div>
 
-                              <div className="space-y-2">
-                                <label className="text-[11px] font-medium text-slate-500 mb-1 block">Voice Part</label>
-                                <div className="flex flex-wrap gap-2 lg:flex-nowrap bg-white dark:bg-[#131521] p-1.5 rounded-xl border border-slate-200 dark:border-white/5">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1 block">Phone (Optional)</label>
+                                  <input
+                                    value={phone}
+                                    onChange={e => setPhone(e.target.value)}
+                                    placeholder="080..."
+                                    className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-5 py-3 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-medium text-slate-900 dark:text-white"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1 block">Email (Optional)</label>
+                                  <input
+                                    type="email"
+                                    value={email}
+                                    onChange={e => setEmail(e.target.value)}
+                                    placeholder="name@email.com"
+                                    className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-5 py-3 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-medium text-slate-900 dark:text-white"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1 block">Voice Part</label>
+                                <div className="flex flex-wrap gap-2 bg-white dark:bg-[#131521] p-1.5 rounded-xl border border-slate-200 dark:border-white/5">
                                   {VOICE_PARTS.map(p => (
                                     <button
                                       key={p}
                                       type="button"
                                       onClick={() => setVoicePart(p)}
                                       className={cn(
-                                        "flex-1 min-w-[60px] py-2 rounded-lg text-[11px] sm:text-xs font-medium transition-all",
-                                        voicePart === p ? "bg-indigo-600/90 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
+                                        "flex-1 min-w-[60px] py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                                        voicePart === p ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/40" : "text-slate-500 hover:text-slate-300"
                                       )}
                                     >
                                       {p}
@@ -548,10 +635,19 @@ function PublicView() {
                             <button
                               type="submit"
                               disabled={submitting || !voicePart}
-                              className="w-full bg-gradient-to-b from-[#638F75] to-[#426150] text-[#E0EFE6] font-bold py-4 rounded-xl transition-all shadow-[0_8px_30px_rgba(66,97,80,0.4)] flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 text-[16px] border border-[#6F9E82]/50 hover:brightness-110"
+                              className={cn(
+                                "w-full font-black py-4 rounded-xl transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 text-[14px] uppercase tracking-[0.2em] border",
+                                stats.available > 0
+                                  ? "bg-gradient-to-b from-indigo-500 to-indigo-700 text-white shadow-[0_8px_30px_rgba(79,70,229,0.4)] border-indigo-400/50"
+                                  : "bg-gradient-to-b from-rose-500 to-rose-700 text-white shadow-[0_8px_30px_rgba(225,29,72,0.4)] border-rose-400/50"
+                              )}
                             >
-                              {submitting ? <Loader2 size={24} className="animate-spin" /> : null}
-                              {submitting ? 'Processing...' : !voicePart ? 'Select Voice Part' : 'Reserve Now'}
+                              {submitting ? <Loader2 size={18} className="animate-spin" /> : null}
+                              {submitting
+                                ? 'Syncing...'
+                                : !voicePart
+                                  ? 'Pick Voice Part'
+                                  : stats.available > 0 ? 'Reserve Slot' : 'Join Waitlist'}
                             </button>
                           </div>
                         </form>
@@ -577,22 +673,28 @@ function LoginView({ onLogin }: { onLogin: () => void }) {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    // Hardcoded credentials as requested
-    if (email === 'admin@amemusochoir.org' && password === 'Password@1') {
-      setTimeout(() => {
+    try {
+      const admin = await getAdminUser(email);
+
+      // Fallback for initial setup if the table is empty - strictly for migration
+      const isInitialSetup = !admin && email === 'admin@amemusochoir.org' && password === 'Password@1';
+
+      if (isInitialSetup || (admin && admin.password_hash === password)) {
         onLogin();
         navigate('/admin');
-      }, 800);
-    } else {
-      setTimeout(() => {
+      } else {
         setError('Invalid email or password');
-        setLoading(false);
-      }, 500);
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Connection failed. Please check your network.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -601,83 +703,584 @@ function LoginView({ onLogin }: { onLogin: () => void }) {
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md"
+        className="glass w-full max-w-md p-8 rounded-[2.5rem] border border-slate-200 dark:border-white/5 shadow-2xl space-y-8"
       >
-        <div className="glass p-10 rounded-[2.5rem] border-slate-200 dark:border-white/5 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-indigo-600/10 blur-[100px] rounded-full pointer-events-none" />
+        <div className="text-center">
+          <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-500/40">
+            <Music className="text-white" size={32} />
+          </div>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2 uppercase italic tracking-tight">Admin Access</h2>
+          <p className="text-slate-500 dark:text-slate-400 text-sm italic">Authorized personnel only</p>
+        </div>
 
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-500/40 mb-6">
-              <Music className="text-white" size={32} />
-            </div>
-            <h2 className="text-3xl font-black text-slate-900 dark:text-white italic uppercase">Admin Access</h2>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Enter credentials to manage soloists</p>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest block ml-1">Email Address</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="admin@amemusochoir.org"
+              className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-bold"
+            />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">Email Address</label>
-              <input
-                required
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="admin@amemusochoir.org"
-                className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 text-slate-900 dark:text-white font-medium"
-              />
-            </div>
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest block ml-1">Password</label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-bold"
+            />
+          </div>
 
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">Password</label>
-              <input
-                required
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 text-slate-900 dark:text-white font-medium"
-              />
-            </div>
-
-            {error && (
-              <motion.p
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-rose-500 text-xs font-bold text-center"
-              >
-                {error}
-              </motion.p>
-            )}
-
-            <button
-              disabled={loading}
-              type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl transition-all shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-70 text-sm uppercase italic"
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-xs font-bold text-center"
             >
-              {loading ? <Loader2 size={18} className="animate-spin" /> : null}
-              {loading ? 'Authenticating...' : 'Sign In'}
-            </button>
+              {error}
+            </motion.div>
+          )}
 
-            <button
-              onClick={() => navigate('/')}
-              type="button"
-              className="w-full text-slate-500 hover:text-slate-900 dark:hover:text-white text-[11px] font-bold uppercase tracking-widest transition-colors"
-            >
-              Back to Roster
-            </button>
-          </form>
-        </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition-all shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 uppercase italic tracking-wider"
+          >
+            {loading ? <Loader2 size={24} className="animate-spin" /> : null}
+            {loading ? 'Verifying...' : 'Login to Dashboard'}
+          </button>
+        </form>
+
+        <button
+          onClick={() => navigate('/')}
+          className="w-full text-slate-500 hover:text-indigo-400 text-xs font-bold transition-all uppercase tracking-widest"
+        >
+          Back to Roster
+        </button>
       </motion.div>
     </div>
   );
 }
 
+// --- Soloist Status View ---
+
+function SoloistStatusView() {
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState('');
+
+  const handleCheck = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!search.trim()) return;
+    setLoading(true);
+    setError('');
+    setResult(null);
+
+    try {
+      const { data, error: dbError } = await supabase
+        .from('registrations')
+        .select(`
+          *,
+          repertoire_submissions (*)
+        `)
+        .ilike('full_name', `%${search.trim()}%`)
+        .limit(5);
+
+      if (dbError) throw dbError;
+      if (!data || data.length === 0) {
+        setError('No registration found for that name.');
+      } else {
+        setResult(data);
+      }
+    } catch (err) {
+      console.error(err);
+      setError('An error occurred while fetching your status.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Layout subtitle="Status Checker" isAuthenticated={false}>
+      <div className="max-w-2xl mx-auto space-y-8">
+        <div className="glass p-8 rounded-[2.5rem] border border-slate-200 dark:border-white/5 space-y-6">
+          <div className="text-center">
+            <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2 uppercase italic tracking-tight">Track Your Solo</h2>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">Enter your name to check your registration and song status.</p>
+          </div>
+
+          <form onSubmit={handleCheck} className="flex gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Enter your registered full name..."
+                className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-bold"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-8 bg-indigo-600 text-white font-black rounded-2xl shadow-lg shadow-indigo-500/30 transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50 flex items-center gap-2"
+            >
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
+              Check
+            </button>
+          </form>
+
+          {error && (
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-xs font-bold text-center">
+              {error}
+            </div>
+          )}
+
+          {result && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {result.map((reg: any) => (
+                <motion.div
+                  key={reg.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[2rem] p-6 space-y-4 shadow-xl"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-xl font-black text-slate-900 dark:text-white leading-none tracking-tight">{reg.full_name}</h3>
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 mt-2">Slot S-{reg.slot_id}</p>
+                    </div>
+                    <div className="px-3 py-1 bg-indigo-600/10 border border-indigo-500/20 rounded-lg text-indigo-400 text-[10px] font-black uppercase tracking-wider">
+                      {reg.voice_part}
+                    </div>
+                  </div>
+
+                  {/* QR Pass Section */}
+                  <div className="bg-slate-50 dark:bg-white/5 rounded-2xl p-6 flex flex-col items-center gap-4 border border-slate-200 dark:border-white/5">
+                    <div className="bg-white p-3 rounded-2xl shadow-lg shadow-indigo-500/10">
+                      <QRCodeCanvas
+                        value={reg.id}
+                        size={120}
+                        level="H"
+                        includeMargin={false}
+                        imageSettings={{
+                          src: "https://amemuso.com/favicon.ico", // Hypothetical logo or placeholder
+                          x: undefined,
+                          y: undefined,
+                          height: 24,
+                          width: 24,
+                          excavate: true,
+                        }}
+                      />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-900 dark:text-white">Check-in Pass</p>
+                      <p className="text-[9px] text-slate-500 font-medium">Present this at the venue</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Repertoire Status</span>
+                      <div className="w-24 h-1 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
+                        <div className={cn(
+                          "h-full transition-all duration-500",
+                          reg.repertoire_submissions?.some((s: any) => s.status === 'approved') ? "w-full bg-emerald-500" :
+                            reg.repertoire_submissions?.length > 0 ? "w-1/2 bg-amber-500" : "w-0"
+                        )} />
+                      </div>
+                    </div>
+
+                    {reg.repertoire_submissions && reg.repertoire_submissions.length > 0 ? (
+                      <div className="space-y-3">
+                        {reg.repertoire_submissions.map((sub: any) => (
+                          <div key={sub.id} className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5">
+                            <div className="flex justify-between items-start gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{sub.song_title}</p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{sub.artist || 'N/A'}</p>
+                              </div>
+                              <span className={cn(
+                                "shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest",
+                                sub.status === 'approved' ? "bg-emerald-500/10 text-emerald-500" :
+                                  sub.status === 'rejected' ? "bg-rose-500/10 text-rose-500" :
+                                    "bg-amber-500/10 text-amber-500"
+                              )}>
+                                {sub.status || 'pending'}
+                              </span>
+                            </div>
+                            {sub.admin_comments && (
+                              <div className="mt-3 pt-3 border-t border-slate-200 dark:border-white/10">
+                                <p className="text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-tighter flex items-center gap-1">
+                                  <Music size={10} /> Admin Feedback
+                                </p>
+                                <p className="text-[10px] text-slate-500 italic">{sub.admin_comments}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl text-center">
+                        <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">No Song Submitted</p>
+                        <p className="text-[9px] text-slate-500 mt-1">Please submit your repertoire options soon.</p>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+// --- Analytics & Stage Views ---
+
+function AnalyticsView({ registrations, repertoires }: { registrations: any[], repertoires: any[] }) {
+  const stats = {
+    total: registrations.length,
+    soprano: registrations.filter(r => r.voice_part === 'Soprano').length,
+    alto: registrations.filter(r => r.voice_part === 'Alto').length,
+    tenor: registrations.filter(r => r.voice_part === 'Tenor').length,
+    bass: registrations.filter(r => r.voice_part === 'Bass').length,
+  };
+
+  const totalPossible = 70;
+  const fillRate = totalPossible > 0 ? Math.round((stats.total / totalPossible) * 100) : 0;
+
+  const submissionStats = {
+    approved: repertoires.filter(r => r.status === 'approved').length,
+    pending: repertoires.filter(r => r.status === 'pending').length,
+    rejected: repertoires.filter(r => r.status === 'rejected').length,
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Total Fill Rate Card */}
+        <div className="lg:col-span-4 glass p-8 rounded-[2.5rem] border-slate-200 dark:border-white/5 flex flex-col items-center justify-center">
+          <div className="relative w-48 h-48">
+            <svg className="w-full h-full transform -rotate-90">
+              <circle cx="96" cy="96" r="80" fill="transparent" stroke="currentColor" strokeWidth="16" className="text-slate-100 dark:text-white/5" />
+              <motion.circle
+                cx="96" cy="96" r="80" fill="transparent" stroke="currentColor" strokeWidth="16"
+                strokeDasharray={502.4}
+                initial={{ strokeDashoffset: 502.4 }}
+                animate={{ strokeDashoffset: 502.4 - (502.4 * fillRate) / 100 }}
+                transition={{ duration: 1.5, ease: "easeOut" }}
+                strokeLinecap="round"
+                className="text-indigo-600 shadow-[0_0_20px_rgba(79,70,229,0.4)]"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-5xl font-black text-slate-900 dark:text-white leading-none">{fillRate}%</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-2">Registration</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Voice Distribution Bar Chart */}
+        <div className="lg:col-span-8 glass p-8 rounded-[2.5rem] border-slate-200 dark:border-white/5 space-y-8">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-wider italic">Voice Distribution</h3>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-indigo-500" />
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Live stats</span>
+            </div>
+          </div>
+          <div className="space-y-6">
+            {VOICE_PARTS.map(part => {
+              const count = stats[part.toLowerCase() as keyof typeof stats] as number;
+              const percent = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+              return (
+                <div key={part} className="space-y-2">
+                  <div className="flex justify-between items-end">
+                    <span className="text-sm font-black text-slate-700 dark:text-slate-300 uppercase tracking-tight">{part}</span>
+                    <span className="text-xs font-black text-slate-900 dark:text-white">{count} <span className="text-slate-500 font-bold ml-1 opacity-60">/ {stats.total}</span></span>
+                  </div>
+                  <div className="h-3 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden flex">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${percent}%` }}
+                      transition={{ duration: 1, delay: 0.2 }}
+                      className={cn(
+                        "h-full rounded-full relative group",
+                        part === 'Soprano' && "bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.4)]",
+                        part === 'Alto' && "bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.4)]",
+                        part === 'Tenor' && "bg-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.4)]",
+                        part === 'Bass' && "bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]"
+                      )}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Submission Breakdown */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {[
+          { label: 'Approved', count: submissionStats.approved, color: 'text-emerald-500', bg: 'bg-emerald-500/5', border: 'border-emerald-500/10' },
+          { label: 'Pending Review', count: submissionStats.pending, color: 'text-amber-500', bg: 'bg-amber-500/5', border: 'border-amber-500/10' },
+          { label: 'Rejected / Cleanup', count: submissionStats.rejected, color: 'text-rose-500', bg: 'bg-rose-500/5', border: 'border-rose-500/10' }
+        ].map((item, idx) => (
+          <motion.div
+            key={idx}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 * idx }}
+            className={cn("glass p-8 rounded-[2rem] border relative overflow-hidden group", item.bg, item.border)}
+          >
+            <div className="relative z-10">
+              <span className={cn("text-5xl font-black block mb-2", item.color)}>{item.count}</span>
+              <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">{item.label}</p>
+            </div>
+            <div className={cn("absolute -right-4 -bottom-4 opacity-10 blur-xl w-24 h-24 rounded-full", item.color.replace('text-', 'bg-'))} />
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function LiveModeView({ registrations, performanceWeeks, onUpdateStatus, onResetStatus }: {
+  registrations: any[],
+  performanceWeeks: any[],
+  onUpdateStatus: (id: string, status: string) => Promise<void>,
+  onResetStatus: () => Promise<void>
+}) {
+  const [loading, setLoading] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [selectedWeekId, setSelectedWeekId] = useState<string | null>(null);
+
+  const selectedWeek = performanceWeeks.find(w => w.id === selectedWeekId);
+
+  // Filter only those who haven't performed yet or are currently on stage, specifically for the selected week's slots
+  const liveList = useMemo(() => {
+    if (!selectedWeek) return [];
+
+    // Sort registrations based on their index in the selected week's slot_ids array
+    return selectedWeek.slot_ids
+      .map((slotId: number) => registrations.find((r: any) => r.slot_id === slotId))
+      .filter((r: any) => r && (!r.performance_status || (r.performance_status !== 'completed' && r.performance_status !== 'skipped')));
+  }, [selectedWeek, registrations]);
+
+  const current = liveList[0];
+  const upNext = liveList.slice(1, 5);
+
+  const handleStatus = async (id: string, status: string) => {
+    setLoading(id);
+    await onUpdateStatus(id, status);
+    setLoading(null);
+  }
+
+  if (!selectedWeekId && performanceWeeks.length > 0) {
+    return (
+      <div className="space-y-8 animate-in fade-in duration-700">
+        <div className="glass p-12 rounded-[3rem] border-slate-200 dark:border-white/5 text-center space-y-8">
+          <div className="w-20 h-20 bg-indigo-600/10 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Monitor size={40} />
+          </div>
+          <div className="max-w-md mx-auto space-y-4">
+            <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">Select Show Date</h2>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Please select a performance date from the roster to start managing the stage queue.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
+            {performanceWeeks.map(week => (
+              <button
+                key={week.id}
+                onClick={() => setSelectedWeekId(week.id)}
+                className="p-6 rounded-3xl bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 hover:border-indigo-500 hover:shadow-xl hover:shadow-indigo-500/10 transition-all text-left group"
+              >
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">Roster Date</span>
+                <span className="text-xl font-black text-slate-900 dark:text-white group-hover:text-indigo-500 transition-colors">{week.date}</span>
+                <div className="mt-4 flex items-center gap-2 text-xs font-bold text-slate-400 italic">
+                  <span>{week.slot_ids.length} Slots</span>
+                  <span>•</span>
+                  <span>{registrations.filter(r => week.slot_ids.includes(r.slot_id)).length} Registered</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (performanceWeeks.length === 0) {
+    return (
+      <div className="glass p-20 rounded-[3rem] border-slate-200 dark:border-white/5 text-center space-y-6">
+        <div className="w-20 h-20 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-dashed border-slate-300 dark:border-white/10">
+          <Settings size={40} />
+        </div>
+        <h2 className="text-3xl font-black text-slate-400 uppercase italic tracking-tight">No Roster Configured</h2>
+        <p className="text-slate-500 max-w-sm mx-auto">Please set up performance weeks and allocate slots in the App Settings tab first.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-700">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setSelectedWeekId(null)}
+            className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-0.5">Active Roster</span>
+            <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">{selectedWeek?.date}</h3>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              if (window.confirm("Are you sure you want to reset ALL performance statuses? This will move everyone back to 'Pending'.")) {
+                setResetting(true);
+                await onResetStatus();
+                setResetting(false);
+              }
+            }}
+            disabled={resetting}
+            className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 text-rose-500 rounded-full border border-rose-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all disabled:opacity-50"
+          >
+            {resetting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+            Reset Stage Roster
+          </button>
+          <div className="flex items-center gap-3 bg-indigo-500/10 text-indigo-500 px-4 py-2 rounded-full border border-indigo-500/20">
+            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Live Mode Active</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+        <div className="xl:col-span-8">
+          <div className="relative overflow-hidden rounded-[3rem] bg-indigo-600 p-1 shadow-2xl shadow-indigo-500/20">
+            <div className="relative z-10 bg-slate-900 rounded-[2.8rem] p-12 lg:p-20 min-h-[600px] flex flex-col justify-center items-center text-center space-y-12">
+              {current ? (
+                <>
+                  <div className="space-y-6">
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-black uppercase tracking-[0.3em]"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                      Active on Stage
+                    </motion.div>
+                    <h2 className="text-7xl lg:text-9xl font-black text-white tracking-tighter italic uppercase drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">{current.full_name}</h2>
+                    <div className="flex flex-wrap items-center justify-center gap-8 mt-6">
+                      <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Position</span>
+                        <span className="text-4xl font-black text-indigo-400">S-{current.slot_id}</span>
+                      </div>
+                      <div className="w-[1px] h-12 bg-white/10 hidden sm:block" />
+                      <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Voice Part</span>
+                        <span className="text-4xl font-black text-white uppercase italic">{current.voice_part}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-6 w-full max-w-lg">
+                    <button
+                      onClick={() => handleStatus(current.id, 'completed')}
+                      disabled={!!loading}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-6 px-10 rounded-[2rem] transition-all shadow-xl shadow-emerald-500/30 uppercase tracking-[0.2em] italic active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
+                    >
+                      {loading === current.id ? <Loader2 className="animate-spin" /> : <Check size={24} />}
+                      Success
+                    </button>
+                    <button
+                      onClick={() => handleStatus(current.id, 'skipped')}
+                      disabled={!!loading}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-400 font-black py-6 px-10 rounded-[2rem] transition-all uppercase tracking-[0.2em] active:scale-95 disabled:opacity-50"
+                    >
+                      Skip / Out
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center space-y-6">
+                  <div className="w-24 h-24 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Music size={40} className="text-slate-600" />
+                  </div>
+                  <h2 className="text-4xl font-black text-slate-500 uppercase italic tracking-widest">No More Performers</h2>
+                  <p className="text-slate-600 font-bold">The roster for this date is completed.</p>
+                </div>
+              )}
+            </div>
+            {/* Dynamic Light Rays */}
+            <div className="absolute -top-24 -left-24 w-96 h-96 bg-indigo-500/20 blur-[120px] rounded-full pointer-events-none" />
+            <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-emerald-500/10 blur-[120px] rounded-full pointer-events-none" />
+          </div>
+        </div>
+
+        <div className="xl:col-span-4 space-y-8">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-white/5">
+            <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-wider italic flex items-center gap-3">
+              <Activity className="text-indigo-500" size={18} /> Queue List
+            </h3>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{liveList.length} Remaining</span>
+          </div>
+
+          <div className="space-y-4">
+            {upNext.map((r: any, idx: number) => (
+              <motion.div
+                key={r.id}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.1 }}
+                className="glass p-6 rounded-[2rem] border border-slate-200 dark:border-white/5 flex items-center justify-between group hover:border-indigo-500/40 transition-all cursor-default"
+              >
+                <div className="flex items-center gap-5">
+                  <div className="w-14 h-14 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/10 rounded-2xl flex items-center justify-center font-black text-2xl text-slate-400 group-hover:text-indigo-500 group-hover:bg-indigo-500/5 transition-all">
+                    {r.slot_id}
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-tight group-hover:text-indigo-400 transition-colors">{r.full_name}</h4>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{r.voice_part}</span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+            {upNext.length === 0 && !current && (
+              <div className="p-12 text-center text-slate-500 font-black uppercase tracking-[0.3em] bg-slate-100 dark:bg-white/5 rounded-[2rem] text-xs">
+                Show concluded
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // --- Admin View ---
 
-function AdminView() {
+function AdminView({ onLogout }: { onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState('list');
   const [registrations, setRegistrations] = useState<any[]>([]);
+  const [waitlist, setWaitlist] = useState<any[]>([]);
   const [repertoires, setRepertoires] = useState<any[]>([]);
+  const [performanceWeeks, setPerformanceWeeks] = useState<any[]>([]);
   const [maxSlots, setMaxSlots] = useState(60);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -707,10 +1310,18 @@ function AdminView() {
 
   const fetchData = async () => {
     try {
-      const [configs, regs, reps] = await Promise.all([getConfigs(), getRegistrations(), getRepertoires()]);
+      const [configs, regs, reps, weeks, wait] = await Promise.all([
+        getConfigs(),
+        getRegistrations(),
+        getRepertoires(),
+        getPerformanceWeeks(),
+        getWaitlist()
+      ]);
       if (configs.max_slots) setMaxSlots(parseInt(configs.max_slots));
       setRegistrations(regs);
       setRepertoires(reps);
+      setPerformanceWeeks(weeks);
+      setWaitlist(wait);
     } catch (err) {
       console.error(err);
     } finally {
@@ -723,7 +1334,12 @@ function AdminView() {
     fetchData();
     const sub = supabase.channel('admin').on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, fetchData).subscribe();
     const sub_reps = supabase.channel('admin_reps').on('postgres_changes', { event: '*', schema: 'public', table: 'repertoire_submissions' }, fetchData).subscribe();
-    return () => { supabase.removeChannel(sub); supabase.removeChannel(sub_reps); };
+    const sub_wait = supabase.channel('admin_wait').on('postgres_changes', { event: '*', schema: 'public', table: 'waitlist' }, fetchData).subscribe();
+    return () => {
+      supabase.removeChannel(sub);
+      supabase.removeChannel(sub_reps);
+      supabase.removeChannel(sub_wait);
+    };
   }, []);
 
   useEffect(() => {
@@ -942,6 +1558,51 @@ function AdminView() {
     }
   };
 
+  const handlePromoteWaitlist = async (entry: any) => {
+    // Automatically pick the first available slot
+    const takenSlots = registrations.map(r => r.slot_id);
+    let nextSlot = -1;
+    for (let i = 1; i <= maxSlots; i++) {
+      if (!takenSlots.includes(i)) {
+        nextSlot = i;
+        break;
+      }
+    }
+
+    if (nextSlot === -1) {
+      alert("No available slots to promote to. Please delete a registration first or increase max slots.");
+      return;
+    }
+
+    if (!window.confirm(`Promote ${entry.full_name} to slot S-${nextSlot}?`)) return;
+
+    try {
+      setBulkActionLoading(true);
+      // 1. Register as soloist
+      await registerSoloist(entry.full_name, entry.voice_part, nextSlot);
+      // 2. Delete from waitlist
+      await deleteWaitlistEntry(entry.id);
+      await fetchData();
+      alert(`${entry.full_name} promoted to S-${nextSlot}`);
+    } catch (err: any) {
+      console.error(err);
+      alert("Promotion failed: " + (err.message || "Unknown error"));
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleRemoveWaitlist = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to remove ${name} from the waitlist?`)) return;
+    try {
+      await deleteWaitlistEntry(id);
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      alert("Removal failed");
+    }
+  };
+
   const handleDownloadCSV = () => {
     if (registrations.length === 0) return;
     const sorted = [...registrations].sort((a, b) => a.slot_id - b.slot_id);
@@ -966,18 +1627,29 @@ function AdminView() {
   };
 
   return (
-    <Layout title="Dashboard Overview" subtitle="Administrator">
+    <Layout title="Dashboard Overview" subtitle="Administrator" isAuthenticated={true} onLogout={onLogout}>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-12 glass p-8 rounded-[2.5rem] border-slate-200 dark:border-white/5 space-y-8">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-2xl border border-slate-200 dark:border-white/5 overflow-x-auto whitespace-nowrap hide-scroll">
               <button onClick={() => setActiveTab('list')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'list' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>Member List</button>
+              <button onClick={() => setActiveTab('checkin')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2", activeTab === 'checkin' ? "bg-emerald-600 text-white shadow-lg glow-emerald" : "text-slate-500 hover:text-slate-900 dark:text-white")}>
+                Check-in
+              </button>
               <button onClick={() => setActiveTab('repertoire')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'repertoire' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>
                 Song Approvals
                 {repertoires.filter(s => s.status === 'pending').length > 0 && (
-                  <span className="ml-2 bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px]">{repertoires.filter(s => s.status === 'pending').length}</span>
+                  <span className="ml-2 bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] uppercase font-black">{repertoires.filter(s => s.status === 'pending').length}</span>
                 )}
               </button>
+              <button onClick={() => setActiveTab('waitlist')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2", activeTab === 'waitlist' ? "bg-rose-600 text-white shadow-lg glow-rose" : "text-slate-500 hover:text-slate-900 dark:text-white")}>
+                Waitlist
+                {waitlist.length > 0 && (
+                  <span className="bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] uppercase font-black">{waitlist.length}</span>
+                )}
+              </button>
+              <button onClick={() => setActiveTab('analytics')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'analytics' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>Analytics</button>
+              <button onClick={() => setActiveTab('live')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'live' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>Stage Mode</button>
               <button onClick={() => setActiveTab('settings')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'settings' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>App Settings</button>
             </div>
             {activeTab === 'list' && (
@@ -1183,6 +1855,209 @@ function AdminView() {
                 </div>
               </div>
             </div>
+          ) : activeTab === 'checkin' ? (
+            <div className="space-y-8 max-w-4xl mx-auto py-8">
+              <div className="text-center space-y-4">
+                <div className="w-20 h-20 bg-emerald-500/20 rounded-[2rem] flex items-center justify-center mx-auto text-emerald-500 border border-emerald-500/30">
+                  <Check size={40} strokeWidth={3} />
+                </div>
+                <h3 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tighter">Fast Check-in</h3>
+                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Scan QR Code or Type Soloist ID for verification</p>
+              </div>
+
+              <div className="glass p-8 rounded-[3rem] border border-emerald-500/20 shadow-2xl space-y-8">
+                <div className="relative">
+                  <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600" size={24} />
+                  <input
+                    autoFocus
+                    placeholder="Scan or Enter ID..."
+                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border-2 border-slate-200 dark:border-white/5 rounded-[2rem] pl-16 pr-6 py-6 text-xl focus:border-emerald-500 outline-none transition-all placeholder:text-slate-700 font-bold text-center uppercase tracking-widest"
+                    onChange={(e) => {
+                      const val = e.target.value.trim();
+                      if (val.length >= 20) { // IDs are long UUIDs
+                        setSearchQuery(val);
+                      }
+                    }}
+                  />
+                </div>
+
+                {searchQuery && (
+                  <AnimatePresence mode="wait">
+                    {registrations.filter(r => r.id === searchQuery).length > 0 ? (
+                      registrations.filter(r => r.id === searchQuery).map(r => (
+                        <motion.div
+                          key={r.id}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="bg-emerald-500/10 border border-emerald-500/20 rounded-[2.5rem] p-10 space-y-8 text-center"
+                        >
+                          <div className="space-y-4">
+                            <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/40">
+                              <Check size={32} className="text-slate-900" strokeWidth={4} />
+                            </div>
+                            <div>
+                              <h4 className="text-4xl font-black text-slate-900 dark:text-white uppercase italic leading-tight">{r.full_name}</h4>
+                              <p className="text-lg font-bold text-emerald-500 uppercase tracking-[0.3em] mt-2">Slot S-{r.slot_id} • {r.voice_part}</p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-6">
+                            <div className="p-6 bg-white dark:bg-black/20 rounded-3xl border border-white/5">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Repertoire</p>
+                              <p className="text-sm font-bold text-slate-900 dark:text-white">
+                                {repertoires.find(rep => rep.registration_id === r.id && rep.status === 'approved')?.song_title || 'No Approved Song'}
+                              </p>
+                            </div>
+                            <div className="p-6 bg-white dark:bg-black/20 rounded-3xl border border-white/5">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Status</p>
+                              <p className="text-sm font-bold text-emerald-500 uppercase tracking-widest">Verified</p>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              alert("Check-in Successful!");
+                              setSearchQuery('');
+                            }}
+                            className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-black py-6 rounded-[2rem] text-xl transition-all shadow-xl shadow-emerald-500/30 uppercase italic"
+                          >
+                            Confirm Arrival
+                          </button>
+                        </motion.div>
+                      ))
+                    ) : (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-center py-10"
+                      >
+                        <p className="text-slate-500 font-bold uppercase tracking-widest italic">No match found for this ID</p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                )}
+              </div>
+            </div>
+          ) : activeTab === 'waitlist' ? (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-rose-500/20 rounded-xl flex items-center justify-center text-rose-500">
+                    <Grid size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Waitlist Queue</h3>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{waitlist.length} soloists waiting</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[2rem] overflow-hidden shadow-2xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/5">
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Pos</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Name</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Voice</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Contact</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Joined</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-white/5">
+                      {waitlist.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-20 text-center text-slate-500 font-bold uppercase tracking-widest text-xs">
+                            No one on the waitlist
+                          </td>
+                        </tr>
+                      ) : (
+                        waitlist.map((w, idx) => (
+                          <tr key={w.id} className="group hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                            <td className="px-6 py-4">
+                              <span className="text-xs font-black text-slate-400">#{idx + 1}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="font-bold text-slate-900 dark:text-white text-sm">{w.full_name}</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={cn(
+                                "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
+                                w.voice_part === 'Soprano' ? "bg-rose-500/10 text-rose-500" :
+                                  w.voice_part === 'Alto' ? "bg-amber-500/10 text-amber-500" :
+                                    w.voice_part === 'Tenor' ? "bg-sky-500/10 text-sky-500" :
+                                      "bg-emerald-500/10 text-emerald-500"
+                              )}>
+                                {w.voice_part}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="space-y-0.5">
+                                {w.phone && <div className="text-[10px] text-slate-500 font-medium">{w.phone}</div>}
+                                {w.email && <div className="text-[10px] text-slate-400">{w.email}</div>}
+                                {!w.phone && !w.email && <div className="text-[10px] text-slate-600 italic">None Provided</div>}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-[10px] text-slate-500 font-medium">
+                                {new Date(w.created_at).toLocaleDateString()}
+                              </div>
+                              <div className="text-[9px] text-slate-600">
+                                {new Date(w.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={() => handlePromoteWaitlist(w)}
+                                  disabled={bulkActionLoading || stats.total >= maxSlots}
+                                  className="px-4 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-30"
+                                >
+                                  {bulkActionLoading ? '...' : 'Promote'}
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveWaitlist(w.id, w.full_name)}
+                                  disabled={bulkActionLoading}
+                                  className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 rounded-xl transition-all"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : activeTab === 'analytics' ? (
+            <AnalyticsView registrations={registrations} repertoires={repertoires} />
+          ) : activeTab === 'live' ? (
+            <LiveModeView
+              registrations={registrations}
+              performanceWeeks={performanceWeeks}
+              onUpdateStatus={async (id: string, status: string) => {
+                try {
+                  await updatePerformanceStatus(id, status);
+                  await fetchData();
+                } catch (err: any) {
+                  console.error(err);
+                  alert("Database Error: " + (err.message || "Failed to update status. Please ensure the 'performance_status' column exists in your registrations table."));
+                }
+              }}
+              onResetStatus={async () => {
+                try {
+                  await resetPerformanceStatus();
+                  await fetchData();
+                } catch (err: any) {
+                  console.error(err);
+                  alert("Failed to reset: " + (err.message || "Unknown error"));
+                }
+              }}
+            />
           ) : activeTab === 'repertoire' ? (
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-6">
@@ -1412,39 +2287,27 @@ function AdminView() {
           loading={deletingRepId !== null || bulkActionLoading}
         />
       </AnimatePresence>
-    </Layout>
+    </Layout >
   );
 }
 
 // --- Roster View ---
 
-const ROSTER_SCHEDULE = [
-  { date: '8th March', slots: [41, 43, 45, 47] },
-  { date: '15th March', slots: [1, 3, 5, 7] },
-  { date: '22nd March', slots: [10, 12, 14, 16] },
-  { date: '29th March', slots: [34, 36, 38, 40] },
-  { date: '12th April', slots: [58, 60, 62, 64] },
-  { date: '19th April', slots: [42, 44, 46, 48] },
-  { date: '26th April', slots: [25, 27, 29, 31] },
-  { date: '3rd May', slots: [26, 28, 30, 32] },
-  { date: '10th May', slots: [33, 35, 37, 39] },
-  { date: '17th May', slots: [57, 59, 61, 63] },
-  { date: '24th May', slots: [2, 4, 6, 8] },
-  { date: '31st May', slots: [18, 20, 22, 24] },
-  { date: '7th June', slots: [49, 51, 53, 55] },
-  { date: '14th June', slots: [50, 52, 54, 56] },
-  { date: '21st June', slots: [9, 11, 13, 15] },
-  { date: '28th June', slots: [17, 19, 21, 23] }
-];
-
 function RosterView() {
   const [registrations, setRegistrations] = useState<any[]>([]);
+  const [performanceWeeks, setPerformanceWeeks] = useState<any[]>([]); // Added this line based on usage
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
     try {
-      const regs = await getRegistrations();
-      setRegistrations(regs);
+      const [regs, weeks] = await Promise.all([
+        getRegistrations(),
+        getPerformanceWeeks()
+      ]);
+      // Filter out test registrations for the public roster
+      setRegistrations(regs.filter((r: any) => !r.is_test));
+      // Filter out test weeks for the public roster
+      setPerformanceWeeks(weeks.filter((w: any) => !w.is_test));
     } catch (err) {
       console.error(err);
     } finally {
@@ -1465,7 +2328,7 @@ function RosterView() {
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
   return (
-    <Layout subtitle="Performance Roster">
+    <Layout subtitle="Performance Roster" isAuthenticated={false}>
       <div className="glass p-8 md:p-12 rounded-[2.5rem] border-slate-200 dark:border-white/5 space-y-10 relative overflow-hidden">
         <div className="text-center max-w-3xl mx-auto">
           <h2 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4 italic">Roster for Compulsory Solo Performance 2026</h2>
@@ -1473,11 +2336,11 @@ function RosterView() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {ROSTER_SCHEDULE.map((week, i) => (
+          {performanceWeeks.map((week, i) => (
             <div key={i} className="bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-3xl p-6 shadow-sm dark:shadow-none flex flex-col hover:border-indigo-500/30 transition-colors">
               <h3 className="text-xl font-black text-indigo-500 mb-6 pb-4 border-b border-slate-100 dark:border-white/5">{week.date}</h3>
               <div className="space-y-4 flex-1">
-                {week.slots.map(slotId => {
+                {week.slot_ids.map((slotId: number) => {
                   const reg = registrations.find(r => r.slot_id === slotId);
                   return (
                     <div key={slotId} className="flex items-start gap-4">
@@ -1638,7 +2501,7 @@ function SongEntryView() {
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
   return (
-    <Layout subtitle="Solo Repertoire Submission">
+    <Layout subtitle="Solo Repertoire Submission" isAuthenticated={false}>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
         {/* Left Side: Form */}
@@ -1930,6 +2793,11 @@ export default function App() {
     localStorage.setItem('is-admin-authenticated', 'true');
   };
 
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('is-admin-authenticated');
+  };
+
   if (!isSupabaseConfigured) {
     return <PublicView />;
   }
@@ -1938,9 +2806,10 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/register" element={<PublicView />} />
+        <Route path="/status" element={<SoloistStatusView />} />
         <Route
           path="/admin"
-          element={isAuthenticated ? <AdminView /> : <Navigate to="/login" replace />}
+          element={isAuthenticated ? <AdminView onLogout={handleLogout} /> : <Navigate to="/login" replace />}
         />
         <Route path="/login" element={<LoginView onLogin={handleLogin} />} />
         <Route path="/" element={<RosterView />} />

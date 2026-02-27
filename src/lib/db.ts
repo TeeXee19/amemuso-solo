@@ -9,16 +9,16 @@ export const getConfigs = async () => {
 };
 
 export const getRegistrations = async () => {
-    const { data, error } = await supabase.from('registrations').select('*');
+    const { data, error } = await supabase.from('registrations').select('*').order('created_at', { ascending: true });
     if (error) throw error;
     return data;
 };
 
-export const registerSoloist = async (fullName: string, voicePart: string, slotId: number) => {
+export const registerSoloist = async (fullName: string, voicePart: string, slotId: number, isTest = false) => {
     if (!supabase) return;
     const { data, error } = await supabase
         .from('registrations')
-        .insert([{ full_name: fullName, voice_part: voicePart, slot_id: slotId }]);
+        .insert([{ full_name: fullName, voice_part: voicePart, slot_id: slotId, is_test: isTest }]);
     if (error) throw error;
     return data;
 };
@@ -52,6 +52,27 @@ export const deleteRegistration = async (id: string) => {
 
     if (error) throw error;
     if (!data || data.length === 0) throw new Error(`Missing record or RLS block. 0 rows deleted for ID: ${id}`);
+    return data;
+};
+
+export const updatePerformanceStatus = async (id: string, status: string) => {
+    const { data, error } = await supabase
+        .from('registrations')
+        .update({ performance_status: status })
+        .eq('id', id)
+        .select();
+
+    if (error) throw error;
+    return data;
+};
+
+export const resetPerformanceStatus = async () => {
+    const { data, error } = await supabase
+        .from('registrations')
+        .update({ performance_status: 'pending' })
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Update all rows safely
+
+    if (error) throw error;
     return data;
 };
 
@@ -101,10 +122,21 @@ export const addRepertoire = async (
     return data;
 };
 
-export const rejectRepertoire = async (submissionId: string) => {
+export const rejectRepertoire = async (submissionId: string, comments?: string) => {
     const { data, error } = await supabase
         .from('repertoire_submissions')
-        .update({ status: 'rejected' })
+        .update({ status: 'rejected', admin_comments: comments })
+        .eq('id', submissionId)
+        .select();
+
+    if (error) throw error;
+    return data;
+};
+
+export const updateRepertoireComments = async (submissionId: string, comments: string) => {
+    const { data, error } = await supabase
+        .from('repertoire_submissions')
+        .update({ admin_comments: comments })
         .eq('id', submissionId)
         .select();
 
@@ -152,5 +184,76 @@ export const deleteAllRepertoires = async () => {
         .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all rows trick safely
 
     if (error) throw error;
+    return data;
+};
+
+// --- Performance Weeks ---
+
+export const getPerformanceWeeks = async () => {
+    const { data, error } = await supabase
+        .from('performance_weeks')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+};
+
+export const addPerformanceWeek = async (date: string, slotIds: number[], isTest = false) => {
+    const { data, error } = await supabase
+        .from('performance_weeks')
+        .insert([{ date, slot_ids: slotIds, is_test: isTest }])
+        .select();
+
+    if (error) throw error;
+    return data;
+};
+
+export const deletePerformanceWeek = async (id: string) => {
+    const { error } = await supabase
+        .from('performance_weeks')
+        .delete()
+        .eq('id', id);
+
+    if (error) throw error;
+};
+
+// --- Waitlist System ---
+
+export const getWaitlist = async () => {
+    const { data, error } = await supabase
+        .from('waitlist')
+        .select('*')
+        .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+};
+
+export const joinWaitlist = async (fullName: string, voicePart: string, email?: string, phone?: string, isTest = false) => {
+    const { data, error } = await supabase
+        .from('waitlist')
+        .insert([{ full_name: fullName, voice_part: voicePart, email, phone, is_test: isTest }])
+        .select();
+    if (error) throw error;
+    return data;
+};
+
+export const deleteWaitlistEntry = async (id: string) => {
+    const { error } = await supabase
+        .from('waitlist')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+};
+
+// --- RBAC / Admin System ---
+
+export const getAdminUser = async (email: string) => {
+    const { data, error } = await supabase
+        .from('users_admin')
+        .select('*')
+        .eq('email', email)
+        .single();
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "no rows returned"
     return data;
 };
