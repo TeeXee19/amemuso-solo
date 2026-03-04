@@ -14,11 +14,17 @@ export const getRegistrations = async () => {
     return data;
 };
 
-export const registerSoloist = async (fullName: string, voicePart: string, slotId: number, isTest = false) => {
+export const registerSoloist = async (fullName: string, voicePart: string, slotId: number, phone?: string, isTest = false) => {
     if (!supabase) return;
     const { data, error } = await supabase
         .from('registrations')
-        .insert([{ full_name: fullName, voice_part: voicePart, slot_id: slotId, is_test: isTest }]);
+        .insert([{
+            full_name: fullName,
+            voice_part: voicePart,
+            slot_id: slotId,
+            phone_number: phone,
+            is_test: isTest
+        }]);
     if (error) throw error;
     return data;
 };
@@ -256,4 +262,183 @@ export const getAdminUser = async (email: string) => {
         .single();
     if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "no rows returned"
     return data;
+};
+
+// --- Members System (Phase 5) ---
+
+export const getMembers = async () => {
+    const { data, error } = await supabase
+        .from('members')
+        .select(`
+            *,
+            member_positions (
+                title,
+                category
+            ),
+            registrations (
+                full_name,
+                slot_id,
+                voice_part,
+                performance_status
+            )
+        `)
+        .order('full_name', { ascending: true });
+    if (error) throw error;
+    return data || [];
+};
+
+export const addMember = async (member: any) => {
+    const { data, error } = await supabase
+        .from('members')
+        .insert([member])
+        .select();
+    if (error) throw error;
+    return data;
+};
+
+export const importRegistrationsToMembers = async () => {
+    if (!supabase) return { imported: 0, total: 0 };
+
+    // 1. Get all registrations
+    const { data: regs, error: regsErr } = await supabase.from('registrations').select('*');
+    if (regsErr) throw regsErr;
+
+    // 2. Get existing members to avoid duplicates
+    const { data: existingMembers, error: memErr } = await supabase.from('members').select('registration_id');
+    if (memErr) throw memErr;
+
+    const existingRegIds = new Set(existingMembers?.map((m: any) => m.registration_id).filter(Boolean));
+
+    // 3. Filter and Sanitize
+    const toImport = regs?.filter((r: any) =>
+        r.id &&
+        typeof r.id === 'string' &&
+        r.id.length > 5 &&
+        !existingRegIds.has(r.id)
+    ) || [];
+
+    if (toImport.length === 0) return { imported: 0, total: regs?.length || 0 };
+
+    // 4. Insert
+    const membersToInsert = toImport.map((r: any) => ({
+        full_name: r.full_name,
+        voice_part: r.voice_part,
+        registration_id: r.id,
+        is_soloist: true,
+        phone: r.phone_number || r.phone || null,
+        email: r.email || null
+    }));
+
+    const { data, error: insErr } = await supabase.from('members').insert(membersToInsert).select();
+    if (insErr) throw insErr;
+
+    return { imported: data?.length || 0, total: regs?.length || 0 };
+};
+
+export const updateMember = async (id: string, updates: any) => {
+    const { data, error } = await supabase
+        .from('members')
+        .update(updates)
+        .eq('id', id)
+        .select();
+    if (error) throw error;
+    return data;
+};
+
+export const deleteMember = async (id: string) => {
+    const { error } = await supabase
+        .from('members')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+};
+
+export const uploadMemberPhoto = async (file: File) => {
+    if (!supabase) throw new Error("Supabase not configured");
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+    const filePath = `photos/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+        .from('member-profiles')
+        .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+        .from('member-profiles')
+        .getPublicUrl(filePath);
+
+    return data.publicUrl;
+};
+
+// --- Member Positions (Phase 9) ---
+
+export const getMemberPositions = async () => {
+    const { data, error } = await supabase
+        .from('member_positions')
+        .select('*')
+        .order('rank', { ascending: true });
+    if (error) throw error;
+    return data || [];
+};
+
+export const addMemberPosition = async (title: string, category: string = 'General', rank: number = 0) => {
+    const { data, error } = await supabase
+        .from('member_positions')
+        .insert([{ title, category, rank }])
+        .select();
+    if (error) throw error;
+    return data;
+};
+
+export const updateMemberPosition = async (id: string, updates: any) => {
+    const { data, error } = await supabase
+        .from('member_positions')
+        .update(updates)
+        .eq('id', id)
+        .select();
+    if (error) throw error;
+    return data;
+};
+
+export const deleteMemberPosition = async (id: string) => {
+    const { error } = await supabase
+        .from('member_positions')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+};
+
+// --- Member History (Phase 9) ---
+
+export const getMemberHistory = async (memberId: string) => {
+    // Get the member's registration_id if they have one linked
+    const { data: member, error: memErr } = await supabase
+        .from('members')
+        .select('full_name, registration_id')
+        .eq('id', memberId)
+        .single();
+
+    if (memErr) throw memErr;
+
+    // Find all registrations with similar full_names (to catch historical data before the members table migration)
+    // Plus the specific linked registration_id
+    const { data: history, error: histErr } = await supabase
+        .from('registrations')
+        .select(`
+            *,
+            repertoire_submissions (
+                song_title,
+                artist_composer,
+                status,
+                created_at
+            )
+        `)
+        .or(`full_name.ilike.%${member.full_name}%,id.eq.${member.registration_id || '00000000-0000-0000-0000-000000000000'}`)
+        .order('created_at', { ascending: false });
+
+    if (histErr) throw histErr;
+    return history || [];
 };

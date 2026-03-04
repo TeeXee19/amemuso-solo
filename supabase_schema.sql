@@ -104,3 +104,74 @@ CREATE POLICY "Admin read users" ON users_admin FOR SELECT USING (true);
 INSERT INTO users_admin (email, password_hash, role)
 VALUES ('admin@amemusochoir.org', 'admin123', 'admin')
 ON CONFLICT (email) DO NOTHING;
+
+
+-- 11. Member Positions
+CREATE TABLE IF NOT EXISTS member_positions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL UNIQUE,
+  category TEXT CHECK (category IN ('Exco', 'Part Leader', 'Other')) DEFAULT 'Other',
+  rank INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Seed some default positions
+INSERT INTO member_positions (title, category, rank) VALUES 
+('Music Director', 'Exco', 1),
+('Assistant Music Director', 'Exco', 2),
+('Speaker', 'Exco', 3),
+('Soprano Part Leader', 'Part Leader', 4),
+('Alto Part Leader', 'Part Leader', 5),
+('Tenor Part Leader', 'Part Leader', 6),
+('Bass Part Leader', 'Part Leader', 7)
+ON CONFLICT (title) DO NOTHING;
+
+ALTER TABLE member_positions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read positions" ON member_positions;
+CREATE POLICY "Public read positions" ON member_positions FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admin all positions" ON member_positions;
+CREATE POLICY "Admin all positions" ON member_positions FOR ALL USING (true);
+
+-- 12. Members (Added join date and dynamic positions)
+CREATE TABLE IF NOT EXISTS members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name TEXT NOT NULL,
+  voice_part TEXT NOT NULL,
+  bio TEXT,
+  photo_url TEXT,
+  phone TEXT,
+  email TEXT,
+  registration_id UUID REFERENCES registrations(id) ON DELETE SET NULL,
+  is_soloist BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Add missing columns if table already exists from previous phases
+ALTER TABLE members ADD COLUMN IF NOT EXISTS joined_at DATE DEFAULT CURRENT_DATE;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS position_id UUID REFERENCES member_positions(id) ON DELETE SET NULL;
+
+ALTER TABLE members ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read members" ON members;
+CREATE POLICY "Public read members" ON members FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admin all members" ON members;
+CREATE POLICY "Admin all members" ON members FOR ALL USING (true);
+
+-- 12. Storage Buckets & Policies
+-- Run this in SQL Editor:
+-- INSERT INTO storage.buckets (id, name, public) 
+-- VALUES ('member-profiles', 'member-profiles', true) 
+-- ON CONFLICT (id) DO NOTHING;
+
+-- Policies for public reading
+-- CREATE POLICY "Public Access" ON storage.objects FOR SELECT USING ( bucket_id = 'member-profiles' );
+
+-- Policies for public uploading (Update to target specific folder/roles in production)
+-- CREATE POLICY "Public Upload" ON storage.objects FOR INSERT WITH CHECK ( bucket_id = 'member-profiles' );
+
+-- Policies for public updating/deleting
+-- CREATE POLICY "Public Update" ON storage.objects FOR UPDATE USING ( bucket_id = 'member-profiles' );
+-- CREATE POLICY "Public Delete" ON storage.objects FOR DELETE USING ( bucket_id = 'member-profiles' );

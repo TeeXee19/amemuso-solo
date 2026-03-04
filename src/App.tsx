@@ -6,11 +6,14 @@ import { supabase, isSupabaseConfigured } from './lib/supabase';
 import {
   getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires, updatePerformanceStatus, resetPerformanceStatus,
   getPerformanceWeeks,
-  getWaitlist, joinWaitlist, deleteWaitlistEntry, getAdminUser
+  getWaitlist, joinWaitlist, deleteWaitlistEntry, getAdminUser,
+  getMembers, addMember, updateMember, deleteMember, importRegistrationsToMembers, uploadMemberPhoto,
+  getMemberPositions, addMemberPosition, updateMemberPosition, deleteMemberPosition, getMemberHistory
 } from './lib/db';
 import {
-  Check, Loader2, Music, X, Edit2, Trash2, Sun, Moon, Monitor,
-  ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity
+  ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
+  Users, Trash2, Loader2, X, Check, Music, Sun, Monitor, Moon, Edit2, Plus, Camera,
+  Calendar, Briefcase, History
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -23,11 +26,31 @@ const VOICE_PARTS = ['Soprano', 'Alto', 'Tenor', 'Bass'];
 
 // --- Components ---
 
+function ErrorFallback() {
+  return (
+    <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17] p-8 text-center">
+      <div className="max-w-md space-y-6">
+        <div className="w-20 h-20 bg-rose-500/10 text-rose-500 rounded-3xl flex items-center justify-center mx-auto">
+          <Activity size={40} />
+        </div>
+        <h1 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">Something went wrong</h1>
+        <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">The application encountered an unexpected error. This usually happens if the database is still being configured or a table is missing.</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-8 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-lg shadow-indigo-500/30 transition-all hover:bg-indigo-700 uppercase italic tracking-wider"
+        >
+          Reload Application
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading }: any) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -54,6 +77,262 @@ function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading }: a
               className="flex-1 py-3 px-4 rounded-xl text-sm font-bold bg-rose-500 hover:bg-rose-400 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, loading, positions = [] }: any) {
+  const [form, setForm] = useState({
+    full_name: '',
+    voice_part: 'Soprano',
+    bio: '',
+    photo_url: '',
+    phone: '',
+    email: '',
+    joined_at: new Date().toISOString().split('T')[0],
+    position_id: '',
+    registration_id: '',
+    is_soloist: false
+  });
+
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    if (member) {
+      setForm({
+        full_name: member.full_name || '',
+        voice_part: member.voice_part || 'Soprano',
+        bio: member.bio || '',
+        photo_url: member.photo_url || '',
+        phone: member.phone || '',
+        email: member.email || '',
+        joined_at: member.joined_at || new Date().toISOString().split('T')[0],
+        position_id: member.position_id || '',
+        registration_id: member.registration_id || '',
+        is_soloist: member.is_soloist || false
+      });
+    } else {
+      setForm({
+        full_name: '',
+        voice_part: 'Soprano',
+        bio: '',
+        photo_url: '',
+        phone: '',
+        email: '',
+        joined_at: new Date().toISOString().split('T')[0],
+        position_id: '',
+        registration_id: '',
+        is_soloist: false
+      });
+    }
+  }, [member, isOpen]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const url = await uploadMemberPhoto(file);
+      setForm(prev => ({ ...prev, photo_url: url }));
+    } catch (err: any) {
+      console.error(err);
+      alert("Upload failed: " + (err.message || "Unknown error"));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="w-full max-w-2xl bg-white dark:bg-[#131521] rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden"
+      >
+        <div className="p-8 space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">
+              {member ? 'Edit Member Profile' : 'New Member Profile'}
+            </h3>
+            <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors text-slate-500">
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-6">
+              <div className="flex flex-col items-center gap-4">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block self-start">Profile Photo</label>
+                <div className="relative group w-full aspect-square max-w-[240px] rounded-3xl overflow-hidden bg-slate-50 dark:bg-[#0b0d17] border-2 border-dashed border-slate-200 dark:border-white/10 flex flex-col items-center justify-center text-center p-4 transition-all hover:border-indigo-500/50">
+                  {form.photo_url || uploading ? (
+                    <>
+                      {uploading ? (
+                        <div className="absolute inset-0 z-10 bg-white/80 dark:bg-black/80 flex items-center justify-center">
+                          <Loader2 className="animate-spin text-indigo-500" size={32} />
+                        </div>
+                      ) : null}
+                      <img
+                        src={form.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(form.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`}
+                        alt=""
+                        className="w-full h-full object-cover rounded-2xl"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button className="p-3 bg-white/20 backdrop-blur-md rounded-2xl text-white font-bold text-xs flex items-center gap-2">
+                          <Camera size={14} /> Change Photo
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="w-12 h-12 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto">
+                        <Camera size={24} />
+                      </div>
+                      <p className="text-xs text-slate-500 font-bold">Click to upload photo</p>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Full Name</label>
+                <input
+                  value={form.full_name}
+                  onChange={e => setForm({ ...form, full_name: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
+                  placeholder="John Doe"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Voice Part</label>
+                <select
+                  value={form.voice_part}
+                  onChange={e => setForm({ ...form, voice_part: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none appearance-none"
+                >
+                  {VOICE_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Phone Number</label>
+                <input
+                  value={form.phone}
+                  onChange={e => setForm({ ...form, phone: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none"
+                  placeholder="080... or +234..."
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Email Address</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm({ ...form, email: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none"
+                  placeholder="email@example.com"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Join Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="date"
+                      value={form.joined_at}
+                      onChange={e => setForm({ ...form, joined_at: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm focus:border-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Position / Role</label>
+                  <div className="relative">
+                    <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <select
+                      value={form.position_id}
+                      onChange={e => setForm({ ...form, position_id: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm focus:border-indigo-500 outline-none appearance-none"
+                    >
+                      <option value="">Member</option>
+                      {positions.map((p: any) => (
+                        <option key={p.id} value={p.id}>{p.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Bio (Short)</label>
+                <textarea
+                  value={form.bio}
+                  onChange={e => setForm({ ...form, bio: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none min-h-[100px]"
+                  placeholder="Tell us about the member..."
+                />
+              </div>
+              <div className="p-4 bg-indigo-500/5 rounded-2xl border border-indigo-500/10 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Is Soloist?</span>
+                  <button
+                    onClick={() => setForm({ ...form, is_soloist: !form.is_soloist })}
+                    className={cn(
+                      "w-12 h-6 rounded-full transition-all relative",
+                      form.is_soloist ? "bg-indigo-600" : "bg-slate-300 dark:bg-white/10"
+                    )}
+                  >
+                    <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all", form.is_soloist ? "left-7" : "left-1")} />
+                  </button>
+                </div>
+                {form.is_soloist && (
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-indigo-400">Link to Registration Slot</label>
+                    <select
+                      value={form.registration_id}
+                      onChange={e => setForm({ ...form, registration_id: e.target.value })}
+                      className="w-full bg-white dark:bg-[#131521] border border-indigo-500/20 rounded-lg px-3 py-2 text-xs focus:border-indigo-500 outline-none"
+                    >
+                      <option value="">Select Soloist Slot...</option>
+                      {registrations.map((r: any) => (
+                        <option key={r.id} value={r.id}>S-{r.slot_id}: {r.full_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-4 pt-6 border-t border-slate-100 dark:border-white/5">
+            <button
+              onClick={onClose}
+              className="flex-1 py-4 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 font-bold rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onSave(form)}
+              disabled={loading || !form.full_name}
+              className="flex-[2] py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-500/20 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? <Loader2 size={20} className="animate-spin" /> : <Check size={20} />}
+              {member ? 'Update Profile' : 'Create Profile'}
             </button>
           </div>
         </div>
@@ -145,6 +424,15 @@ function Layout({ children, subtitle, isAuthenticated, onLogout }: any) {
               Repertoire
             </button>
             <button
+              onClick={() => navigate('/members')}
+              className={cn(
+                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                location.pathname === '/members' ? "bg-slate-200 dark:bg-white/10 text-slate-900 dark:text-white" : "text-slate-500 hover:text-slate-900 dark:text-white"
+              )}
+            >
+              Directory
+            </button>
+            <button
               onClick={() => navigate('/')}
               className={cn(
                 "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
@@ -206,6 +494,12 @@ function Layout({ children, subtitle, isAuthenticated, onLogout }: any) {
                     className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
                   >
                     Roster
+                  </button>
+                  <button
+                    onClick={() => { setIsMobileMenuOpen(false); navigate('/members'); }}
+                    className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/members' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
+                  >
+                    Directory
                   </button>
                   <button
                     onClick={() => { setIsMobileMenuOpen(false); navigate('/register'); }}
@@ -320,7 +614,7 @@ function PublicView() {
       if (isWaitlist) {
         await joinWaitlist(fullName, voicePart, email, phone);
       } else {
-        await registerSoloist(fullName, voicePart, selectedSlot!);
+        await registerSoloist(fullName, voicePart, selectedSlot!, phone);
       }
       await fetchData(); // Immediate reload
       setSuccess(true);
@@ -342,8 +636,8 @@ function PublicView() {
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
   const stats = {
-    reserved: registrations.length,
-    available: maxSlots - registrations.length,
+    reserved: (registrations || []).length,
+    available: maxSlots - (registrations || []).length,
     total: maxSlots
   };
 
@@ -431,7 +725,7 @@ function PublicView() {
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-8 gap-4 z-10 relative">
               {Array.from({ length: maxSlots }).map((_, i) => {
                 const slotId = i + 1;
-                const reg = registrations.find(r => r.slot_id === slotId);
+                const reg = (registrations || []).find(r => r.slot_id === slotId);
                 const isTaken = !!reg;
                 const isSelected = selectedSlot === slotId;
 
@@ -848,7 +1142,7 @@ function SoloistStatusView() {
         {/* Results */}
         {result && (
           <div className="space-y-4">
-            {result.map((reg: any) => (
+            {(result || []).map((reg: any) => (
               <motion.div
                 key={reg.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -871,7 +1165,7 @@ function SoloistStatusView() {
                   <div className="bg-slate-50 dark:bg-white/5 rounded-2xl p-5 flex flex-col sm:flex-row items-center gap-5 border border-slate-200 dark:border-white/5">
                     <div className="bg-white p-3 rounded-2xl shadow-lg shadow-indigo-500/10 shrink-0">
                       <QRCodeCanvas
-                        value={reg.id}
+                        value={reg.id || ''}
                         size={120}
                         level="H"
                         includeMargin={false}
@@ -902,15 +1196,15 @@ function SoloistStatusView() {
                       <div className="w-24 h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
                         <div className={cn(
                           "h-full transition-all duration-500 rounded-full",
-                          reg.repertoire_submissions?.some((s: any) => s.status === 'approved') ? "w-full bg-emerald-500" :
-                            reg.repertoire_submissions?.length > 0 ? "w-1/2 bg-amber-500" : "w-0"
+                          (reg.repertoire_submissions || []).some((s: any) => s.status === 'approved') ? "w-full bg-emerald-500" :
+                            (reg.repertoire_submissions || []).length > 0 ? "w-1/2 bg-amber-500" : "w-0"
                         )} />
                       </div>
                     </div>
 
-                    {reg.repertoire_submissions && reg.repertoire_submissions.length > 0 ? (
+                    {reg.repertoire_submissions && (reg.repertoire_submissions || []).length > 0 ? (
                       <div className="space-y-2">
-                        {reg.repertoire_submissions.map((sub: any) => (
+                        {(reg.repertoire_submissions || []).map((sub: any) => (
                           <div key={sub.id} className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5">
                             <div className="flex justify-between items-start gap-3">
                               <div className="flex-1 min-w-0">
@@ -953,25 +1247,320 @@ function SoloistStatusView() {
     </Layout>
   );
 }
+// --- Members View (Phase 5) ---
+
+function MemberProfileModal({ member, isOpen, onClose }: any) {
+  if (!member || !isOpen) return null;
+
+  const avatarUrl = member.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(member.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="w-full max-w-lg bg-white dark:bg-[#131521] rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden relative"
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-6 right-6 p-2 rounded-full bg-slate-100 dark:bg-white/5 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all z-10"
+        >
+          <X size={20} />
+        </button>
+
+        <div className="h-32 bg-gradient-to-r from-indigo-600 to-purple-600 relative">
+          <div className="absolute -bottom-16 left-8 p-1 bg-white dark:bg-[#131521] rounded-3xl shadow-xl">
+            <div className="w-32 h-32 rounded-2xl bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <img src={avatarUrl} alt={member.full_name} className="w-full h-full object-cover" />
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-20 p-8 space-y-6">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">{member.full_name}</h3>
+              {member.is_soloist && (
+                <div className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded-md text-amber-500 text-[9px] font-black uppercase tracking-widest">
+                  Soloist
+                </div>
+              )}
+            </div>
+            <p className="text-indigo-500 dark:text-indigo-400 font-bold uppercase tracking-widest text-xs">{member.voice_part}</p>
+          </div>
+
+          {member.bio && (
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Biography</h4>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed italic">"{member.bio}"</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100 dark:border-white/5">
+            <div className="space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Position / Role</p>
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                {member.member_positions?.title || 'Member'}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Joined Choir</p>
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                {new Date(member.joined_at || member.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Email Address</p>
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300 truncate">{member.email || 'Private'}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Phone Number</p>
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300 truncate">{member.phone || 'Private'}</p>
+            </div>
+          </div>
+
+          <MemberHistoryView memberId={member.id} />
+
+          {member.is_soloist && member.registrations && (
+            <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+                  <Music size={20} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Performance Slot</p>
+                  <p className="text-sm font-black text-slate-900 dark:text-white">S-{member.registrations.slot_id} • {member.registrations.voice_part}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { onClose(); window.location.href = '/status'; }}
+                className="p-2 rounded-lg bg-indigo-600/10 text-indigo-500 hover:bg-indigo-600 hover:text-white transition-all transition-all"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function MemberHistoryView({ memberId }: { memberId: string }) {
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const data = await getMemberHistory(memberId);
+        setHistory(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchHistory();
+  }, [memberId]);
+
+  if (loading) return <div className="flex justify-center p-4"><Loader2 className="animate-spin text-indigo-500" size={20} /></div>;
+  if (history.length === 0) return (
+    <div className="p-4 bg-slate-50 dark:bg-black/20 rounded-2xl text-center border border-dashed border-slate-200 dark:border-white/5">
+      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">No Soloist History Found</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+        <History size={12} /> Performance History
+      </h4>
+      <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+        {history.map((reg) => (
+          <div key={reg.id} className="p-3 bg-white dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl flex justify-between items-center group hover:border-indigo-500/30 transition-all">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                {reg.repertoire_submissions?.[0]?.song_title || 'TBD'}
+              </p>
+              <p className="text-[9px] text-slate-500 font-medium">
+                {new Date(reg.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • Slot S-{reg.slot_id}
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <span className={cn(
+                "px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border",
+                reg.performance_status === 'completed' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+              )}>
+                {reg.performance_status}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MembersView() {
+  const [members, setMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('All');
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+
+  useEffect(() => {
+    fetchMembers();
+  }, []);
+
+  const fetchMembers = async () => {
+    try {
+      const data = await getMembers();
+      setMembers(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredMembers = (members || []).filter(m => {
+    const matchesSearch = (m.full_name || '').toLowerCase().includes((search || '').toLowerCase());
+    const matchesFilter = filter === 'All' || m.voice_part === filter;
+    return matchesSearch && matchesFilter;
+  });
+
+  if (loading) return (
+    <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]">
+      <Loader2 className="animate-spin text-indigo-500" size={40} />
+    </div>
+  );
+
+  return (
+    <Layout subtitle="Member Directory" isAuthenticated={false}>
+      <div className="space-y-8 max-w-6xl mx-auto">
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div>
+            <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-2 tracking-tight uppercase italic">Choir Directory</h2>
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Meet the talented members of our choir community.</p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <div className="relative group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-500 transition-colors" size={18} />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search members..."
+                className="w-full sm:w-64 bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-500"
+              />
+            </div>
+            <div className="flex bg-white dark:bg-[#131521] p-1 rounded-2xl border border-slate-200 dark:border-white/5">
+              {['All', ...VOICE_PARTS].map(p => (
+                <button
+                  key={p}
+                  onClick={() => setFilter(p)}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                    filter === p ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Members Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <AnimatePresence>
+            {filteredMembers.map(member => (
+              <motion.div
+                key={member.id}
+                layout
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                onClick={() => setSelectedMember(member)}
+                className="group glass p-6 rounded-[2.5rem] border border-slate-200 dark:border-white/5 hover:border-indigo-500/30 transition-all cursor-pointer relative overflow-hidden flex flex-col items-center text-center space-y-4"
+              >
+                <div className="absolute top-4 right-4 text-indigo-500 opacity-20 group-hover:opacity-100 transition-opacity">
+                  <ExternalLink size={16} />
+                </div>
+
+                <div className="relative">
+                  <div className="w-24 h-24 rounded-3xl bg-slate-100 dark:bg-slate-800 overflow-hidden border-4 border-white dark:border-[#131521] shadow-xl group-hover:scale-105 transition-transform duration-500">
+                    <img
+                      src={member.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(member.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`}
+                      alt={member.full_name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  {member.is_soloist && (
+                    <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-slate-900 border-4 border-white dark:border-[#131521] shadow-lg">
+                      <Music size={12} strokeWidth={3} />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white leading-none tracking-tight">{member.full_name}</h3>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500 mt-2">{member.voice_part}</p>
+                </div>
+
+                {member.bio && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 italic leading-relaxed">
+                    "{member.bio}"
+                  </p>
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+
+        {filteredMembers.length === 0 && (
+          <div className="py-20 text-center space-y-4">
+            <div className="w-20 h-20 bg-slate-200 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto text-slate-400">
+              <Users size={32} />
+            </div>
+            <div>
+              <p className="text-xl font-black text-slate-900 dark:text-white uppercase italic">No members found</p>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">Try adjusting your search or filter.</p>
+            </div>
+          </div>
+        )}
+
+        <MemberProfileModal
+          member={selectedMember}
+          isOpen={!!selectedMember}
+          onClose={() => setSelectedMember(null)}
+        />
+      </div>
+    </Layout>
+  );
+}
 
 // --- Analytics & Stage Views ---
 
 function AnalyticsView({ registrations, repertoires }: { registrations: any[], repertoires: any[] }) {
   const stats = {
-    total: registrations.length,
-    soprano: registrations.filter(r => r.voice_part === 'Soprano').length,
-    alto: registrations.filter(r => r.voice_part === 'Alto').length,
-    tenor: registrations.filter(r => r.voice_part === 'Tenor').length,
-    bass: registrations.filter(r => r.voice_part === 'Bass').length,
+    total: (registrations || []).length,
+    soprano: (registrations || []).filter(r => r.voice_part === 'Soprano').length,
+    alto: (registrations || []).filter(r => r.voice_part === 'Alto').length,
+    tenor: (registrations || []).filter(r => r.voice_part === 'Tenor').length,
+    bass: (registrations || []).filter(r => r.voice_part === 'Bass').length,
   };
 
   const totalPossible = 70;
   const fillRate = totalPossible > 0 ? Math.round((stats.total / totalPossible) * 100) : 0;
 
   const submissionStats = {
-    approved: repertoires.filter(r => r.status === 'approved').length,
-    pending: repertoires.filter(r => r.status === 'pending').length,
-    rejected: repertoires.filter(r => r.status === 'rejected').length,
+    approved: (repertoires || []).filter(r => r.status === 'approved').length,
+    pending: (repertoires || []).filter(r => r.status === 'pending').length,
+    rejected: (repertoires || []).filter(r => r.status === 'rejected').length,
   };
 
   return (
@@ -1283,6 +1872,75 @@ function LiveModeView({ registrations, performanceWeeks, onUpdateStatus, onReset
   )
 }
 
+function PositionManager({ positions, onRefresh }: { positions: any[], onRefresh: () => void }) {
+  const [newTitle, setNewTitle] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleAdd = async () => {
+    if (!newTitle.trim()) return;
+    setLoading(true);
+    try {
+      await addMemberPosition(newTitle.trim());
+      setNewTitle('');
+      onRefresh();
+    } catch (err: any) {
+      alert("Error adding position: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string, title: string) => {
+    if (!window.confirm(`Delete position "${title}"? Members with this position will be reset to "Member".`)) return;
+    try {
+      await deleteMemberPosition(id);
+      onRefresh();
+    } catch (err: any) {
+      alert("Error deleting position: " + err.message);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3 mb-2">
+        <Briefcase size={18} className="text-indigo-400" />
+        <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">Dynamic Positions</h4>
+      </div>
+      <p className="text-xs text-slate-500 leading-relaxed px-1">Manage choir roles like MD, AMD, Part Leaders, etc.</p>
+
+      <div className="flex gap-4">
+        <input
+          value={newTitle}
+          onChange={e => setNewTitle(e.target.value)}
+          placeholder="New Position Title (e.g. Bass Leader)"
+          className="flex-1 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all font-bold text-sm"
+        />
+        <button
+          onClick={handleAdd}
+          disabled={loading || !newTitle.trim()}
+          className="px-8 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-500 transition-all uppercase tracking-tighter italic disabled:opacity-50"
+        >
+          {loading ? <Loader2 size={16} className="animate-spin" /> : 'Add'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {positions.map(p => (
+          <div key={p.id} className="flex items-center justify-between p-4 bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl group hover:border-indigo-500/30 transition-all">
+            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{p.title}</span>
+            <button
+              onClick={() => handleDelete(p.id, p.title)}
+              className="p-2 text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // --- Admin View ---
 
 function AdminView({ onLogout }: { onLogout: () => void }) {
@@ -1291,6 +1949,9 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
   const [waitlist, setWaitlist] = useState<any[]>([]);
   const [repertoires, setRepertoires] = useState<any[]>([]);
   const [performanceWeeks, setPerformanceWeeks] = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
+  const [positions, setPositions] = useState<any[]>([]);
+  const [selectedMember, setSelectedMember] = useState<any>(null);
   const [maxSlots, setMaxSlots] = useState(60);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1303,9 +1964,27 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [repertoireFilter, setRepertoireFilter] = useState('All');
+  const [memberVoiceFilter, setMemberVoiceFilter] = useState('All');
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [deletingRepId, setDeletingRepId] = useState<string | null>(null);
+
+  // Members Tab State
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<any>(null);
+  const [memberForm, setMemberForm] = useState({
+    full_name: '',
+    voice_part: 'Soprano',
+    bio: '',
+    photo_url: '',
+    phone: '',
+    email: '',
+    joined_at: new Date().toISOString().split('T')[0],
+    position_id: '',
+    registration_id: '',
+    is_soloist: false
+  });
+  const [isSavingMember, setIsSavingMember] = useState(false);
 
   const [selectedRepertoires, setSelectedRepertoires] = useState<string[]>([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
@@ -1320,20 +1999,31 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
 
   const fetchData = async () => {
     try {
-      const [configs, regs, reps, weeks, wait] = await Promise.all([
+      const results = await Promise.allSettled([
         getConfigs(),
         getRegistrations(),
         getRepertoires(),
         getPerformanceWeeks(),
-        getWaitlist()
+        getWaitlist(),
+        getMembers(),
+        getMemberPositions()
       ]);
-      if (configs.max_slots) setMaxSlots(parseInt(configs.max_slots));
-      setRegistrations(regs);
-      setRepertoires(reps);
-      setPerformanceWeeks(weeks);
-      setWaitlist(wait);
+
+      const [configsRes, regsRes, repsRes, weeksRes, waitRes, memsRes, posRes] = results;
+
+      if (configsRes.status === 'fulfilled') {
+        if ((configsRes.value as any).max_slots) setMaxSlots(parseInt((configsRes.value as any).max_slots));
+      }
+      if (regsRes.status === 'fulfilled') setRegistrations(regsRes.value as any);
+      if (repsRes.status === 'fulfilled') setRepertoires(repsRes.value as any);
+      if (weeksRes.status === 'fulfilled') setPerformanceWeeks(weeksRes.value as any);
+      if (waitRes.status === 'fulfilled') setWaitlist(waitRes.value as any);
+      if (memsRes.status === 'fulfilled') setMembers(memsRes.value as any);
+      if (posRes.status === 'fulfilled') setPositions(posRes.value as any);
+      else console.error("Members fetch failed:", (memsRes as any).reason);
+
     } catch (err) {
-      console.error(err);
+      console.error("Critical fetch error:", err);
     } finally {
       setLoading(false);
     }
@@ -1345,16 +2035,18 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
     const sub = supabase.channel('admin').on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, fetchData).subscribe();
     const sub_reps = supabase.channel('admin_reps').on('postgres_changes', { event: '*', schema: 'public', table: 'repertoire_submissions' }, fetchData).subscribe();
     const sub_wait = supabase.channel('admin_wait').on('postgres_changes', { event: '*', schema: 'public', table: 'waitlist' }, fetchData).subscribe();
+    const sub_members = supabase.channel('admin_members').on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, fetchData).subscribe();
     return () => {
       supabase.removeChannel(sub);
       supabase.removeChannel(sub_reps);
       supabase.removeChannel(sub_wait);
+      supabase.removeChannel(sub_members);
     };
   }, []);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, voicePartFilter, repertoireFilter, itemsPerPage, activeTab]);
+  }, [searchQuery, voicePartFilter, repertoireFilter, memberVoiceFilter, itemsPerPage, activeTab]);
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]"><Loader2 className="animate-spin text-indigo-500" size={40} /></div>;
 
@@ -1493,14 +2185,14 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
     });
   };
 
-  const filtered = registrations.filter(r => {
+  const filtered = (registrations || []).filter(r => {
     const matchesSearch = r.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.slot_id?.toString().includes(searchQuery);
     const matchesVoice = voicePartFilter === 'All' || r.voice_part === voicePartFilter;
     return matchesSearch && matchesVoice;
   }).sort((a, b) => a.slot_id - b.slot_id);
 
-  const submittedRepertoires = repertoires.filter(r => {
+  const submittedRepertoires = (repertoires || []).filter(r => {
     const matchesSearch = r.registrations?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.song_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.registrations?.slot_id?.toString().includes(searchQuery);
@@ -1522,15 +2214,31 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
     }, {} as Record<string, any>)
   ).sort((a: any, b: any) => a.registrations?.slot_id - b.registrations?.slot_id);
 
-  const totalPages = Math.ceil(activeTab === 'list' ? filtered.length / itemsPerPage : groupedSubmittedRepertoires.length / itemsPerPage);
-  const paginated = (activeTab === 'list' ? filtered : groupedSubmittedRepertoires).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const filteredMembers = (members || []).filter(m => {
+    const matchesSearch = (m.full_name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (m.email?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+    const matchesVoice = memberVoiceFilter === 'All' || m.voice_part === memberVoiceFilter;
+    return matchesSearch && matchesVoice;
+  }).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+
+  const totalPages = Math.ceil(
+    activeTab === 'members' ? (filteredMembers || []).length / itemsPerPage :
+      activeTab === 'list' ? (filtered || []).length / itemsPerPage :
+        (groupedSubmittedRepertoires || []).length / itemsPerPage
+  );
+
+  const paginated = (
+    activeTab === 'members' ? (filteredMembers || []) :
+      activeTab === 'list' ? (filtered || []) :
+        (groupedSubmittedRepertoires || [])
+  ).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const stats = {
-    total: registrations.length,
-    soprano: registrations.filter(r => r.voice_part === 'Soprano').length,
-    alto: registrations.filter(r => r.voice_part === 'Alto').length,
-    tenor: registrations.filter(r => r.voice_part === 'Tenor').length,
-    bass: registrations.filter(r => r.voice_part === 'Bass').length,
+    total: (registrations || []).length,
+    soprano: (registrations || []).filter(r => r.voice_part === 'Soprano').length,
+    alto: (registrations || []).filter(r => r.voice_part === 'Alto').length,
+    tenor: (registrations || []).filter(r => r.voice_part === 'Tenor').length,
+    bass: (registrations || []).filter(r => r.voice_part === 'Bass').length,
   };
 
   const handleEditClick = (r: any) => {
@@ -1570,7 +2278,7 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
 
   const handlePromoteWaitlist = async (entry: any) => {
     // Automatically pick the first available slot
-    const takenSlots = registrations.map(r => r.slot_id);
+    const takenSlots = (registrations || []).map(r => r.slot_id);
     let nextSlot = -1;
     for (let i = 1; i <= maxSlots; i++) {
       if (!takenSlots.includes(i)) {
@@ -1589,7 +2297,7 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
     try {
       setBulkActionLoading(true);
       // 1. Register as soloist
-      await registerSoloist(entry.full_name, entry.voice_part, nextSlot);
+      await registerSoloist(entry.full_name, entry.voice_part, nextSlot, entry.phone);
       // 2. Delete from waitlist
       await deleteWaitlistEntry(entry.id);
       await fetchData();
@@ -1610,6 +2318,48 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
     } catch (err: any) {
       console.error(err);
       alert("Removal failed");
+    }
+  };
+
+  const handleSaveMember = async (form: any) => {
+    setIsSavingMember(true);
+    try {
+      // Sanitize UUID fields - Postgres 400 error on empty string UUIDs
+      const sanitizedForm = {
+        ...form,
+        registration_id: form.registration_id || null
+      };
+
+      if (editingMember) {
+        await updateMember(editingMember.id, sanitizedForm);
+      } else {
+        await addMember(sanitizedForm);
+      }
+      await fetchData();
+      setIsMemberModalOpen(false);
+      setEditingMember(null);
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to save member: " + (err.message || "Unknown error"));
+    } finally {
+      setIsSavingMember(false);
+    }
+  };
+
+  const handleImportMembers = async () => {
+    if (!window.confirm("Import all registered soloists into the member directory? Duplicates will be skipped.")) return;
+    setBulkActionLoading(true);
+    try {
+      const result = await importRegistrationsToMembers();
+      if (result) {
+        await fetchData();
+        alert(`Import complete! ${result.imported} new members added, ${result.total - result.imported} already existed.`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Import failed: " + (err.message || "Unknown error"));
+    } finally {
+      setBulkActionLoading(false);
     }
   };
 
@@ -1646,6 +2396,9 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
               <button onClick={() => setActiveTab('checkin')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2", activeTab === 'checkin' ? "bg-emerald-600 text-white shadow-lg glow-emerald" : "text-slate-500 hover:text-slate-900 dark:text-white")}>
                 Check-in
               </button>
+              <button onClick={() => setActiveTab('members')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2", activeTab === 'members' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>
+                Member Profiles
+              </button>
               <button onClick={() => setActiveTab('repertoire')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'repertoire' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>
                 Song Approvals
                 {repertoires.filter(s => s.status === 'pending').length > 0 && (
@@ -1662,6 +2415,62 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
               <button onClick={() => setActiveTab('live')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'live' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>Stage Mode</button>
               <button onClick={() => setActiveTab('settings')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'settings' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>App Settings</button>
             </div>
+            {activeTab === 'members' && (
+              <div className="flex flex-col xl:flex-row gap-4 w-full lg:w-auto">
+                <button
+                  onClick={handleImportMembers}
+                  disabled={bulkActionLoading}
+                  className="flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
+                >
+                  {bulkActionLoading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                  Import Registered
+                </button>
+                <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5 overflow-x-auto">
+                  {['All', ...VOICE_PARTS].map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setMemberVoiceFilter(p)}
+                      className={cn(
+                        "px-4 py-2 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all whitespace-nowrap",
+                        memberVoiceFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingMember(null);
+                    setMemberForm({
+                      full_name: '',
+                      voice_part: 'Soprano',
+                      bio: '',
+                      photo_url: '',
+                      phone: '',
+                      email: '',
+                      joined_at: new Date().toISOString().split('T')[0],
+                      position_id: '',
+                      registration_id: '',
+                      is_soloist: false
+                    });
+                    setIsMemberModalOpen(true);
+                  }}
+                  className="flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl text-sm font-bold transition-all whitespace-nowrap shadow-lg shadow-emerald-500/20"
+                >
+                  <Plus size={16} /> Add Member
+                </button>
+                <div className="relative w-full xl:w-64">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
+                  <input
+                    placeholder="Search members..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
+                  />
+                </div>
+              </div>
+            )}
             {activeTab === 'list' && (
               <div className="flex flex-col xl:flex-row gap-4 w-full lg:w-auto">
                 <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5 overflow-x-auto">
@@ -1740,7 +2549,146 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
             ))}
           </div>
 
-          {activeTab === 'list' ? (
+          {activeTab === 'members' ? (
+            <div className="space-y-6">
+              <div className="overflow-x-auto rounded-3xl border border-slate-200 dark:border-white/5">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 dark:bg-[#0b0d17] text-[10px] font-black uppercase text-slate-500 tracking-widest border-b border-slate-200 dark:border-white/5">
+                    <tr>
+                      <th className="px-8 py-5">Member</th>
+                      <th className="px-8 py-5">Voice</th>
+                      <th className="px-8 py-5">Contact</th>
+                      <th className="px-8 py-5">Bio Snippet</th>
+                      <th className="px-8 py-5">Soloist</th>
+                      <th className="px-8 py-5 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {paginated.map((m: any) => (
+                      <tr key={m.id} className="hover:bg-white/[0.01] transition-colors">
+                        <td className="px-8 py-5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10">
+                              <img src={m.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(m.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`} alt="" className="w-full h-full object-cover" />
+                            </div>
+                            <div>
+                              <button
+                                onClick={() => setSelectedMember(m)}
+                                className="font-bold text-slate-900 dark:text-white leading-tight hover:text-indigo-500 transition-colors text-left block"
+                              >
+                                {m.full_name}
+                              </button>
+                              <p className="text-[9px] font-black text-indigo-500/60 uppercase tracking-widest mt-0.5">
+                                {m.member_positions?.title || 'Member'}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-8 py-5">
+                          <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">{m.voice_part}</span>
+                        </td>
+                        <td className="px-8 py-5">
+                          <div className="space-y-0.5">
+                            {m.phone && <div className="text-[10px] text-slate-500 font-bold">{m.phone}</div>}
+                            {m.email && <div className="text-[10px] text-slate-400">{m.email}</div>}
+                            {!m.phone && !m.email && <span className="text-[10px] text-slate-600 italic">No Contact</span>}
+                          </div>
+                        </td>
+                        <td className="px-8 py-5">
+                          <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 italic max-w-[200px]">
+                            {m.bio || 'None'}
+                          </p>
+                        </td>
+                        <td className="px-8 py-5">
+                          {m.is_soloist ? (
+                            <div className="flex items-center gap-2 text-amber-500 font-black text-[10px] uppercase tracking-widest">
+                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              Yes (S-{m.registrations?.slot_id})
+                            </div>
+                          ) : (
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">No</span>
+                          )}
+                        </td>
+                        <td className="px-8 py-5">
+                          <div className="flex justify-center gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingMember(m);
+                                setMemberForm({
+                                  full_name: m.full_name,
+                                  voice_part: m.voice_part,
+                                  bio: m.bio || '',
+                                  photo_url: m.photo_url || '',
+                                  phone: m.phone || '',
+                                  email: m.email || '',
+                                  joined_at: m.joined_at || new Date().toISOString().split('T')[0],
+                                  position_id: m.position_id || '',
+                                  registration_id: m.registration_id || '',
+                                  is_soloist: m.is_soloist
+                                });
+                                setIsMemberModalOpen(true);
+                              }}
+                              className="p-2 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-all"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm("Delete this member profile?")) return;
+                                try {
+                                  await deleteMember(m.id);
+                                  await fetchData();
+                                } catch (err) { console.error(err); }
+                              }}
+                              className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-all"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50 rounded-b-[2.5rem]">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                    className="bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 text-slate-900 dark:text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-slate-500 font-medium">
+                    Page <span className="text-slate-900 dark:text-white">{currentPage}</span> of {totalPages || 1}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage(prev => prev - 1)}
+                      className="p-2 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all text-slate-600 dark:text-slate-400"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    <button
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage(prev => prev + 1)}
+                      className="p-2 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all text-slate-600 dark:text-slate-400"
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : activeTab === 'list' ? (
             <div className="overflow-x-auto rounded-3xl border border-slate-200 dark:border-white/5">
               <table className="w-full text-left">
                 <thead className="bg-slate-50 dark:bg-[#0b0d17] text-[10px] font-black uppercase text-slate-500 tracking-widest border-b border-slate-200 dark:border-white/5">
@@ -2282,6 +3230,10 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
                   <button onClick={() => updateMaxSlots(maxSlots)} className="px-8 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-500 transition-all uppercase tracking-tighter italic">Update</button>
                 </div>
               </div>
+
+              <div className="p-8 bg-indigo-500/5 rounded-[2.5rem] border border-indigo-500/10 mt-8">
+                <PositionManager positions={positions} onRefresh={fetchData} />
+              </div>
             </div>
           )}
         </div>
@@ -2294,7 +3246,26 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
           onConfirm={confirmModal.onConfirm}
           title={confirmModal.title}
           message={confirmModal.message}
-          loading={deletingRepId !== null || bulkActionLoading}
+          loading={bulkActionLoading || deletingRepId !== null}
+        />
+
+        <MemberProfileModal
+          member={selectedMember}
+          isOpen={!!selectedMember}
+          onClose={() => setSelectedMember(null)}
+        />
+
+        <MemberEntryModal
+          isOpen={isMemberModalOpen}
+          onClose={() => {
+            setIsMemberModalOpen(false);
+            setEditingMember(null);
+          }}
+          onSave={handleSaveMember}
+          member={editingMember}
+          registrations={registrations}
+          positions={positions}
+          loading={isSavingMember}
         />
       </AnimatePresence>
     </Layout >
@@ -2346,12 +3317,12 @@ function RosterView() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {performanceWeeks.map((week, i) => (
+          {(performanceWeeks || []).map((week, i) => (
             <div key={i} className="bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-3xl p-6 shadow-sm dark:shadow-none flex flex-col hover:border-indigo-500/30 transition-colors">
               <h3 className="text-xl font-black text-indigo-500 mb-6 pb-4 border-b border-slate-100 dark:border-white/5">{week.date}</h3>
               <div className="space-y-4 flex-1">
-                {week.slot_ids.map((slotId: number) => {
-                  const reg = registrations.find(r => r.slot_id === slotId);
+                {(week.slot_ids || []).map((slotId: number) => {
+                  const reg = (registrations || []).find(r => r.slot_id === slotId);
                   return (
                     <div key={slotId} className="flex items-start gap-4">
                       <div className="w-10 h-10 shrink-0 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl flex items-center justify-center font-black text-slate-700 dark:text-slate-300 text-sm shadow-inner group transition-colors">
@@ -2797,6 +3768,18 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('is-admin-authenticated') === 'true';
   });
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    const handleError = (e: ErrorEvent) => {
+      console.error("Global crash caught:", e.error);
+      setHasError(true);
+    };
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
+  if (hasError) return <ErrorFallback />;
 
   const handleLogin = () => {
     setIsAuthenticated(true);
@@ -2817,6 +3800,7 @@ export default function App() {
       <Routes>
         <Route path="/register" element={<PublicView />} />
         <Route path="/status" element={<SoloistStatusView />} />
+        <Route path="/members" element={<MembersView />} />
         <Route
           path="/admin"
           element={isAuthenticated ? <AdminView onLogout={handleLogout} /> : <Navigate to="/login" replace />}
