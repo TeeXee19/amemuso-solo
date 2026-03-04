@@ -8,7 +8,7 @@ import {
   getPerformanceWeeks,
   getWaitlist, joinWaitlist, deleteWaitlistEntry, getAdminUser,
   getMembers, addMember, updateMember, deleteMember, importRegistrationsToMembers, uploadMemberPhoto,
-  getMemberPositions, addMemberPosition, updateMemberPosition, deleteMemberPosition, getMemberHistory
+  getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory
 } from './lib/db';
 import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
@@ -1972,18 +1972,7 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
   // Members Tab State
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<any>(null);
-  const [memberForm, setMemberForm] = useState({
-    full_name: '',
-    voice_part: 'Soprano',
-    bio: '',
-    photo_url: '',
-    phone: '',
-    email: '',
-    joined_at: new Date().toISOString().split('T')[0],
-    position_id: '',
-    registration_id: '',
-    is_soloist: false
-  });
+
   const [isSavingMember, setIsSavingMember] = useState(false);
 
   const [selectedRepertoires, setSelectedRepertoires] = useState<string[]>([]);
@@ -2442,18 +2431,6 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
                 <button
                   onClick={() => {
                     setEditingMember(null);
-                    setMemberForm({
-                      full_name: '',
-                      voice_part: 'Soprano',
-                      bio: '',
-                      photo_url: '',
-                      phone: '',
-                      email: '',
-                      joined_at: new Date().toISOString().split('T')[0],
-                      position_id: '',
-                      registration_id: '',
-                      is_soloist: false
-                    });
                     setIsMemberModalOpen(true);
                   }}
                   className="flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl text-sm font-bold transition-all whitespace-nowrap shadow-lg shadow-emerald-500/20"
@@ -2614,18 +2591,6 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
                             <button
                               onClick={() => {
                                 setEditingMember(m);
-                                setMemberForm({
-                                  full_name: m.full_name,
-                                  voice_part: m.voice_part,
-                                  bio: m.bio || '',
-                                  photo_url: m.photo_url || '',
-                                  phone: m.phone || '',
-                                  email: m.email || '',
-                                  joined_at: m.joined_at || new Date().toISOString().split('T')[0],
-                                  position_id: m.position_id || '',
-                                  registration_id: m.registration_id || '',
-                                  is_soloist: m.is_soloist
-                                });
                                 setIsMemberModalOpen(true);
                               }}
                               className="p-2 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-all"
