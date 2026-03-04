@@ -341,17 +341,91 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
   );
 }
 
+function AdminSidebar({ activeTab, setActiveTab, repertoires, waitlist, onLogout }: any) {
+  const menuItems = [
+    { id: 'list', label: 'Member List', icon: Users },
+    { id: 'checkin', label: 'Check-in', icon: Check, color: 'text-emerald-500' },
+    { id: 'members', label: 'Member Profiles', icon: Grid },
+    { id: 'repertoire', label: 'Song Approvals', icon: Music, badge: repertoires.filter((s: any) => s.status === 'pending').length },
+    { id: 'waitlist', label: 'Waitlist', icon: History, badge: waitlist.length },
+    { id: 'analytics', label: 'Analytics', icon: Activity },
+    { id: 'live', label: 'Stage Mode', icon: Monitor },
+    { id: 'settings', label: 'App Settings', icon: Settings },
+  ];
+
+  return (
+    <div className="flex flex-col h-full bg-white dark:bg-[#131521] border-r border-slate-200 dark:border-white/5 py-8 px-4">
+      <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-1">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={cn(
+                "w-full flex items-center gap-4 px-5 py-3.5 rounded-[1.2rem] text-sm font-bold transition-all relative group",
+                isActive
+                  ? "bg-indigo-600 text-white shadow-xl shadow-indigo-500/30"
+                  : "text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              )}
+            >
+              <Icon size={18} className={cn(isActive ? "text-white" : item.color || "text-slate-400")} />
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.badge !== undefined && item.badge > 0 && (
+                <span className={cn(
+                  "px-2 py-0.5 rounded-full text-[10px] font-black uppercase",
+                  isActive ? "bg-white/20 text-white" : "bg-rose-500 text-white"
+                )}>
+                  {item.badge}
+                </span>
+              )}
+              {isActive && (
+                <motion.div
+                  layoutId="activeTabGlow"
+                  className="absolute inset-0 rounded-[1.2rem] bg-indigo-600/10 blur-xl -z-10"
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-auto pt-6 border-t border-slate-100 dark:border-white/5 space-y-4">
+        <div className="flex items-center gap-3 px-2">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 p-[2px]">
+            <div className="w-full h-full rounded-xl border-2 border-white dark:border-[#131521] overflow-hidden bg-slate-200 dark:bg-slate-800">
+              <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=admin123&backgroundColor=transparent`} alt="User" />
+            </div>
+          </div>
+          <div className="overflow-hidden">
+            <p className="text-xs font-black text-slate-900 dark:text-white leading-none truncate">Admin User</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">admin@amemusochoir.org</p>
+          </div>
+        </div>
+        <button
+          onClick={onLogout}
+          className="w-full flex items-center gap-4 px-5 py-3 rounded-xl text-xs font-bold text-rose-500 hover:bg-rose-500/10 transition-colors"
+        >
+          <X size={16} /> Sign Out
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // --- Shared Layout ---
 
 type Theme = 'light' | 'dark' | 'system';
 
-function Layout({ children, subtitle, isAuthenticated, onLogout }: any) {
+function Layout({ children, subtitle, isAuthenticated, onLogout, sidebar }: any) {
   const navigate = useNavigate();
   const location = useLocation();
   const [theme, setTheme] = useState<Theme>(() => {
     return (localStorage.getItem('theme-preference') as Theme) || 'system';
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAdminDrawerOpen, setIsAdminDrawerOpen] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -367,7 +441,7 @@ function Layout({ children, subtitle, isAuthenticated, onLogout }: any) {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0b0d17] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col">
       {/* Top Navbar */}
-      <header className="px-8 py-4 flex justify-between items-center bg-white dark:bg-[#131521]/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/5 z-50 shadow-sm dark:shadow-none">
+      <header className="h-[73px] px-8 py-4 flex justify-between items-center bg-white dark:bg-[#131521]/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/5 z-50 shadow-sm dark:shadow-none shrink-0">
         <div className="flex items-center gap-4">
           <Link to="/" className="flex items-center gap-3 group">
             <button className="text-slate-500 hover:text-slate-900 dark:text-white mr-2 flex items-center justify-center"><ChevronRight className="rotate-180" size={16} /></button>
@@ -443,8 +517,8 @@ function Layout({ children, subtitle, isAuthenticated, onLogout }: any) {
             </button>
           </div>
 
-          {/* User Nav */}
-          {isAuthenticated && location.pathname.startsWith('/admin') && (
+          {/* User Nav (Only show in header if no sidebar) */}
+          {isAuthenticated && !sidebar && (
             <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-white/5 relative group">
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 p-[2px]">
                 <div className="w-full h-full rounded-full border-2 border-white dark:border-[#131521] overflow-hidden bg-slate-200 dark:bg-slate-800">
@@ -535,19 +609,68 @@ function Layout({ children, subtitle, isAuthenticated, onLogout }: any) {
       </AnimatePresence >
 
       {/* Main Content Area */}
-      < div className="flex-1 overflow-y-auto custom-scrollbar relative" >
-        {/* Background Decor */}
-        < div className="fixed top-0 right-0 w-[50%] h-[50%] bg-indigo-600/5 blur-[120px] rounded-full -z-10" />
-        <div className="fixed bottom-0 left-0 w-[50%] h-[50%] bg-emerald-600/5 blur-[120px] rounded-full -z-10" />
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Desktop Sidebar */}
+        {sidebar && (
+          <aside className="hidden lg:block w-72 h-full flex-shrink-0 relative z-20">
+            {sidebar}
+          </aside>
+        )}
 
-        <div className="max-w-[1600px] mx-auto px-10 py-10">
-          <div className="mb-10">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-[0.3em] mb-3">{subtitle || "Management System"}</p>
+        {/* Mobile/Tablet Admin Drawer */}
+        <AnimatePresence>
+          {sidebar && isAdminDrawerOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsAdminDrawerOpen(false)}
+                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden"
+              />
+              <motion.aside
+                initial={{ x: "-100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "-100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="fixed top-0 left-0 w-80 h-full bg-white dark:bg-[#131521] z-[70] lg:hidden shadow-2xl"
+              >
+                <div className="p-6 border-b border-slate-100 dark:border-white/5 flex justify-between items-center bg-indigo-600 text-white">
+                  <span className="font-black italic uppercase tracking-tight">Admin Menu</span>
+                  <button onClick={() => setIsAdminDrawerOpen(false)} className="p-2 hover:bg-white/10 rounded-lg">
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="h-[calc(100%-73px)] overflow-hidden" onClick={() => setIsAdminDrawerOpen(false)}>
+                  {sidebar}
+                </div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
+
+        <main className="flex-1 overflow-y-auto custom-scrollbar relative">
+          {/* Background Decor */}
+          <div className="fixed top-0 right-0 w-[50%] h-[50%] bg-indigo-600/5 blur-[120px] rounded-full -z-10" />
+          <div className="fixed bottom-0 left-0 w-[50%] h-[50%] bg-emerald-600/5 blur-[120px] rounded-full -z-10" />
+
+          <div className="max-w-[1600px] mx-auto px-6 md:px-10 py-10">
+            {sidebar && (
+              <button
+                onClick={() => setIsAdminDrawerOpen(true)}
+                className="lg:hidden mb-6 flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-bold shadow-xl shadow-indigo-500/30 active:scale-95 transition-transform"
+              >
+                <Menu size={16} /> Dashboard Menu
+              </button>
+            )}
+            <div className="mb-10">
+              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em] mb-3">{subtitle || "Management System"}</p>
+            </div>
+            {children}
           </div>
-          {children}
-        </div>
-      </div >
-    </div >
+        </main>
+      </div>
+    </div>
   );
 }
 
@@ -2222,12 +2345,13 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
         (groupedSubmittedRepertoires || [])
   ).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  const statsSource = activeTab === 'members' ? members : registrations;
   const stats = {
-    total: (registrations || []).length,
-    soprano: (registrations || []).filter(r => r.voice_part === 'Soprano').length,
-    alto: (registrations || []).filter(r => r.voice_part === 'Alto').length,
-    tenor: (registrations || []).filter(r => r.voice_part === 'Tenor').length,
-    bass: (registrations || []).filter(r => r.voice_part === 'Bass').length,
+    total: (statsSource || []).length,
+    soprano: (statsSource || []).filter(r => r.voice_part === 'Soprano').length,
+    alto: (statsSource || []).filter(r => r.voice_part === 'Alto').length,
+    tenor: (statsSource || []).filter(r => r.voice_part === 'Tenor').length,
+    bass: (statsSource || []).filter(r => r.voice_part === 'Bass').length,
   };
 
   const handleEditClick = (r: any) => {
@@ -2316,7 +2440,8 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
       // Sanitize UUID fields - Postgres 400 error on empty string UUIDs
       const sanitizedForm = {
         ...form,
-        registration_id: form.registration_id || null
+        registration_id: form.registration_id || null,
+        position_id: form.position_id || null
       };
 
       if (editingMember) {
@@ -2376,832 +2501,821 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
   };
 
   return (
-    <Layout title="Dashboard Overview" subtitle="Administrator" isAuthenticated={true} onLogout={onLogout}>
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-12 glass p-8 rounded-[2.5rem] border-slate-200 dark:border-white/5 space-y-8">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-            <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-2xl border border-slate-200 dark:border-white/5 overflow-x-auto whitespace-nowrap hide-scroll">
-              <button onClick={() => setActiveTab('list')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'list' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>Member List</button>
-              <button onClick={() => setActiveTab('checkin')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2", activeTab === 'checkin' ? "bg-emerald-600 text-white shadow-lg glow-emerald" : "text-slate-500 hover:text-slate-900 dark:text-white")}>
-                Check-in
-              </button>
-              <button onClick={() => setActiveTab('members')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2", activeTab === 'members' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>
-                Member Profiles
-              </button>
-              <button onClick={() => setActiveTab('repertoire')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'repertoire' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>
-                Song Approvals
-                {repertoires.filter(s => s.status === 'pending').length > 0 && (
-                  <span className="ml-2 bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] uppercase font-black">{repertoires.filter(s => s.status === 'pending').length}</span>
-                )}
-              </button>
-              <button onClick={() => setActiveTab('waitlist')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2", activeTab === 'waitlist' ? "bg-rose-600 text-white shadow-lg glow-rose" : "text-slate-500 hover:text-slate-900 dark:text-white")}>
-                Waitlist
-                {waitlist.length > 0 && (
-                  <span className="bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] uppercase font-black">{waitlist.length}</span>
-                )}
-              </button>
-              <button onClick={() => setActiveTab('analytics')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'analytics' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>Analytics</button>
-              <button onClick={() => setActiveTab('live')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'live' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>Stage Mode</button>
-              <button onClick={() => setActiveTab('settings')} className={cn("px-6 py-2.5 rounded-xl text-xs font-bold transition-all", activeTab === 'settings' ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white")}>App Settings</button>
-            </div>
-            {activeTab === 'members' && (
-              <div className="flex flex-col xl:flex-row gap-4 w-full lg:w-auto">
-                <button
-                  onClick={handleImportMembers}
-                  disabled={bulkActionLoading}
-                  className="flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
-                >
-                  {bulkActionLoading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                  Import Registered
-                </button>
-                <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5 overflow-x-auto">
-                  {['All', ...VOICE_PARTS].map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setMemberVoiceFilter(p)}
-                      className={cn(
-                        "px-4 py-2 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all whitespace-nowrap",
-                        memberVoiceFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
-                      )}
-                    >
-                      {p}
-                    </button>
-                  ))}
+    <Layout
+      subtitle="Administrator"
+      isAuthenticated={true}
+      onLogout={onLogout}
+      sidebar={
+        <AdminSidebar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          repertoires={repertoires}
+          waitlist={waitlist}
+          onLogout={onLogout}
+        />
+      }
+    >
+      <div className="space-y-8">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-8"
+          >
+            {/* Contextual Header Section */}
+            {(activeTab === 'list' || activeTab === 'members' || activeTab === 'repertoire') && (
+              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-white dark:bg-[#131521]/40 p-6 rounded-[2rem] border border-slate-200 dark:border-white/5 backdrop-blur-sm shadow-xl shadow-black/5">
+                <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                  {activeTab === 'members' && (
+                    <>
+                      <button
+                        onClick={handleImportMembers}
+                        disabled={bulkActionLoading}
+                        className="flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
+                      >
+                        {bulkActionLoading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                        Import Registered
+                      </button>
+                      <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5">
+                        {['All', ...VOICE_PARTS].map(p => (
+                          <button
+                            key={p}
+                            onClick={() => setMemberVoiceFilter(p)}
+                            className={cn(
+                              "px-4 py-2 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all",
+                              memberVoiceFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
+                            )}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {activeTab === 'list' && (
+                    <>
+                      <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5">
+                        {['All', ...VOICE_PARTS].map(p => (
+                          <button
+                            key={p}
+                            onClick={() => setVoicePartFilter(p)}
+                            className={cn(
+                              "px-4 py-2 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all",
+                              voicePartFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
+                            )}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={handleDownloadCSV}
+                        className="flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
+                      >
+                        <Download size={16} /> Export CSV
+                      </button>
+                    </>
+                  )}
+                  {activeTab === 'repertoire' && (
+                    <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5">
+                      {['All', 'Pending', 'Approved', 'Rejected'].map(p => (
+                        <button
+                          key={p}
+                          onClick={() => setRepertoireFilter(p)}
+                          className={cn(
+                            "px-4 py-2 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all",
+                            repertoireFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
+                          )}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <button
-                  onClick={() => {
-                    setEditingMember(null);
-                    setIsMemberModalOpen(true);
-                  }}
-                  className="flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl text-sm font-bold transition-all whitespace-nowrap shadow-lg shadow-emerald-500/20"
-                >
-                  <Plus size={16} /> Add Member
-                </button>
-                <div className="relative w-full xl:w-64">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
-                  <input
-                    placeholder="Search members..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
-                  />
+                <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto items-center">
+                  <div className="relative w-full md:w-64">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                    <input
+                      placeholder={activeTab === 'members' ? "Search members..." : activeTab === 'list' ? "Search name..." : "Search song..."}
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
+                    />
+                  </div>
+                  {activeTab === 'members' && (
+                    <button
+                      onClick={() => {
+                        setEditingMember(null);
+                        setIsMemberModalOpen(true);
+                      }}
+                      className="w-full md:w-auto flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl text-sm font-bold transition-all whitespace-nowrap shadow-lg shadow-emerald-500/20"
+                    >
+                      <Plus size={16} /> Add Member
+                    </button>
+                  )}
                 </div>
               </div>
             )}
-            {activeTab === 'list' && (
-              <div className="flex flex-col xl:flex-row gap-4 w-full lg:w-auto">
-                <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5 overflow-x-auto">
-                  {['All', ...VOICE_PARTS].map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setVoicePartFilter(p)}
-                      className={cn(
-                        "px-4 py-2 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all whitespace-nowrap",
-                        voicePartFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
-                      )}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  onClick={handleDownloadCSV}
-                  className="flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
-                >
-                  <Download size={16} /> Export CSV
-                </button>
-                <div className="relative w-full xl:w-64">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
-                  <input
-                    placeholder="Search name or voice part..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
-                  />
-                </div>
-              </div>
-            )}
-            {activeTab === 'repertoire' && (
-              <div className="flex flex-col xl:flex-row gap-4 w-full lg:w-auto">
-                <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5 overflow-x-auto">
-                  {['All', 'Pending', 'Approved', 'Rejected'].map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setRepertoireFilter(p)}
-                      className={cn(
-                        "px-4 py-2 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all whitespace-nowrap",
-                        repertoireFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
-                      )}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-                <div className="relative w-full xl:w-64">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
-                  <input
-                    placeholder="Search song or soloist..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* Dashboard Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {[
-              { label: 'Total', count: stats.total, color: 'text-slate-900 dark:text-white', bg: 'bg-indigo-600/20', border: 'border-indigo-500/30' },
-              { label: 'Soprano', count: stats.soprano, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
-              { label: 'Alto', count: stats.alto, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-              { label: 'Tenor', count: stats.tenor, color: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20' },
-              { label: 'Bass', count: stats.bass, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }
-            ].map((s, i) => (
-              <div key={i} className={cn("p-4 rounded-3xl border flex flex-col justify-center items-center gap-1", s.bg, s.border)}>
-                <span className={cn("text-2xl font-black", s.color)}>{s.count}</span>
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{s.label}</span>
+            {/* Dashboard Stats */}
+            {(activeTab === 'list' || activeTab === 'members') && (
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                {[
+                  { label: 'Total', count: stats.total, color: 'text-slate-900 dark:text-white', bg: 'bg-indigo-600/20', border: 'border-indigo-500/30' },
+                  { label: 'Soprano', count: stats.soprano, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
+                  { label: 'Alto', count: stats.alto, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+                  { label: 'Tenor', count: stats.tenor, color: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20' },
+                  { label: 'Bass', count: stats.bass, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }
+                ].map((s, i) => (
+                  <div key={i} className={cn("p-4 rounded-3xl border flex flex-col justify-center items-center gap-1", s.bg, s.border)}>
+                    <span className={cn("text-2xl font-black", s.color)}>{s.count}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{s.label}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
 
-          {activeTab === 'members' ? (
-            <div className="space-y-6">
+            {activeTab === 'members' ? (
+              <div className="space-y-6">
+                <div className="overflow-x-auto rounded-3xl border border-slate-200 dark:border-white/5">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 dark:bg-[#0b0d17] text-[10px] font-black uppercase text-slate-500 tracking-widest border-b border-slate-200 dark:border-white/5">
+                      <tr>
+                        <th className="px-8 py-5">Member</th>
+                        <th className="px-8 py-5">Voice</th>
+                        <th className="px-8 py-5">Contact</th>
+                        <th className="px-8 py-5">Bio Snippet</th>
+                        <th className="px-8 py-5">Soloist</th>
+                        <th className="px-8 py-5 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {paginated.map((m: any) => (
+                        <tr key={m.id} className="hover:bg-white/[0.01] transition-colors">
+                          <td className="px-8 py-5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10">
+                                <img src={m.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(m.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`} alt="" className="w-full h-full object-cover" />
+                              </div>
+                              <div>
+                                <button
+                                  onClick={() => setSelectedMember(m)}
+                                  className="font-bold text-slate-900 dark:text-white leading-tight hover:text-indigo-500 transition-colors text-left block"
+                                >
+                                  {m.full_name}
+                                </button>
+                                <p className="text-[9px] font-black text-indigo-500/60 uppercase tracking-widest mt-0.5">
+                                  {m.member_positions?.title || 'Member'}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-8 py-5">
+                            <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">{m.voice_part}</span>
+                          </td>
+                          <td className="px-8 py-5">
+                            <div className="space-y-0.5">
+                              {m.phone && <div className="text-[10px] text-slate-500 font-bold">{m.phone}</div>}
+                              {m.email && <div className="text-[10px] text-slate-400">{m.email}</div>}
+                              {!m.phone && !m.email && <span className="text-[10px] text-slate-600 italic">No Contact</span>}
+                            </div>
+                          </td>
+                          <td className="px-8 py-5">
+                            <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 italic max-w-[200px]">
+                              {m.bio || 'None'}
+                            </p>
+                          </td>
+                          <td className="px-8 py-5">
+                            {m.is_soloist ? (
+                              <div className="flex items-center gap-2 text-amber-500 font-black text-[10px] uppercase tracking-widest">
+                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                Yes (S-{m.registrations?.slot_id})
+                              </div>
+                            ) : (
+                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">No</span>
+                            )}
+                          </td>
+                          <td className="px-8 py-5">
+                            <div className="flex justify-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingMember(m);
+                                  setIsMemberModalOpen(true);
+                                }}
+                                className="p-2 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-all"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (!window.confirm("Delete this member profile?")) return;
+                                  try {
+                                    await deleteMember(m.id);
+                                    await fetchData();
+                                  } catch (err) { console.error(err); }
+                                }}
+                                className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-all"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50 rounded-b-[2.5rem]">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                      className="bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 text-slate-900 dark:text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-slate-500 font-medium">
+                      Page <span className="text-slate-900 dark:text-white">{currentPage}</span> of {totalPages || 1}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={currentPage <= 1}
+                        onClick={() => setCurrentPage(prev => prev - 1)}
+                        className="p-2 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all text-slate-600 dark:text-slate-400"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      <button
+                        disabled={currentPage >= totalPages}
+                        onClick={() => setCurrentPage(prev => prev + 1)}
+                        className="p-2 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all text-slate-600 dark:text-slate-400"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : activeTab === 'list' ? (
               <div className="overflow-x-auto rounded-3xl border border-slate-200 dark:border-white/5">
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 dark:bg-[#0b0d17] text-[10px] font-black uppercase text-slate-500 tracking-widest border-b border-slate-200 dark:border-white/5">
                     <tr>
-                      <th className="px-8 py-5">Member</th>
-                      <th className="px-8 py-5">Voice</th>
-                      <th className="px-8 py-5">Contact</th>
-                      <th className="px-8 py-5">Bio Snippet</th>
-                      <th className="px-8 py-5">Soloist</th>
-                      <th className="px-8 py-5 text-center">Actions</th>
+                      <th className="px-8 py-5">Slot</th>
+                      <th className="px-8 py-5">Full Name</th>
+                      <th className="px-8 py-5">Voice Part</th>
+                      <th className="px-8 py-5 text-right">Registration Date</th>
+                      <th className="px-8 py-5 text-center w-24">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {paginated.map((m: any) => (
-                      <tr key={m.id} className="hover:bg-white/[0.01] transition-colors">
+                    {paginated.map((r: any) => (
+                      <tr key={r.id} className="hover:bg-white/[0.01] transition-colors">
                         <td className="px-8 py-5">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10">
-                              <img src={m.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(m.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`} alt="" className="w-full h-full object-cover" />
-                            </div>
-                            <div>
-                              <button
-                                onClick={() => setSelectedMember(m)}
-                                className="font-bold text-slate-900 dark:text-white leading-tight hover:text-indigo-500 transition-colors text-left block"
-                              >
-                                {m.full_name}
-                              </button>
-                              <p className="text-[9px] font-black text-indigo-500/60 uppercase tracking-widest mt-0.5">
-                                {m.member_positions?.title || 'Member'}
-                              </p>
-                            </div>
+                          <div className="w-10 h-10 bg-indigo-600/10 border border-indigo-500/20 rounded-xl flex items-center justify-center font-black text-indigo-400 text-xs">
+                            S-{r.slot_id}
                           </div>
                         </td>
                         <td className="px-8 py-5">
-                          <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">{m.voice_part}</span>
-                        </td>
-                        <td className="px-8 py-5">
-                          <div className="space-y-0.5">
-                            {m.phone && <div className="text-[10px] text-slate-500 font-bold">{m.phone}</div>}
-                            {m.email && <div className="text-[10px] text-slate-400">{m.email}</div>}
-                            {!m.phone && !m.email && <span className="text-[10px] text-slate-600 italic">No Contact</span>}
-                          </div>
-                        </td>
-                        <td className="px-8 py-5">
-                          <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 italic max-w-[200px]">
-                            {m.bio || 'None'}
-                          </p>
-                        </td>
-                        <td className="px-8 py-5">
-                          {m.is_soloist ? (
-                            <div className="flex items-center gap-2 text-amber-500 font-black text-[10px] uppercase tracking-widest">
-                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                              Yes (S-{m.registrations?.slot_id})
-                            </div>
+                          {editingId === r.id ? (
+                            <input
+                              value={editFullName}
+                              onChange={e => setEditFullName(e.target.value)}
+                              className="bg-white dark:bg-[#131521] border border-indigo-500/50 rounded-lg px-3 py-1.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-400 w-full"
+                            />
                           ) : (
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">No</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">{r.full_name}</span>
                           )}
                         </td>
                         <td className="px-8 py-5">
-                          <div className="flex justify-center gap-2">
-                            <button
-                              onClick={() => {
-                                setEditingMember(m);
-                                setIsMemberModalOpen(true);
-                              }}
-                              className="p-2 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-all"
+                          {editingId === r.id ? (
+                            <select
+                              value={editVoicePart}
+                              onChange={e => setEditVoicePart(e.target.value)}
+                              className="bg-white dark:bg-[#131521] border border-indigo-500/50 rounded-lg px-2 py-1.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-400"
                             >
-                              <Edit2 size={14} />
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (!window.confirm("Delete this member profile?")) return;
-                                try {
-                                  await deleteMember(m.id);
-                                  await fetchData();
-                                } catch (err) { console.error(err); }
-                              }}
-                              className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-all"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                              {VOICE_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                          ) : (
+                            <span className={cn(
+                              "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest",
+                              r.voice_part === 'Soprano' && "bg-rose-500/10 text-rose-400 border border-rose-500/20",
+                              r.voice_part === 'Alto' && "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+                              r.voice_part === 'Tenor' && "bg-sky-500/10 text-sky-400 border border-sky-500/20",
+                              r.voice_part === 'Bass' && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            )}>
+                              {r.voice_part}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-8 py-5 text-right text-xs font-bold text-slate-500">
+                          {new Date(r.created_at).toLocaleDateString()} at {new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className="px-8 py-5 text-center">
+                          {editingId === r.id ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <button disabled={savingId === r.id} onClick={handleSaveEdit} className="p-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors">
+                                {savingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                              </button>
+                              <button disabled={savingId === r.id} onClick={() => setEditingId(null)} className="p-1.5 bg-slate-500/10 text-slate-500 dark:text-slate-400 hover:bg-slate-500/20 rounded-lg transition-colors">
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center gap-2">
+                              <button onClick={() => handleEditClick(r)} disabled={deletingId === r.id} className="p-1.5 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors disabled:opacity-50">
+                                <Edit2 size={14} />
+                              </button>
+                              <button onClick={() => handleDeleteClick(r.id)} disabled={deletingId === r.id} className="p-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors disabled:opacity-50">
+                                {deletingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
+                    {paginated.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-8 py-8 text-center text-slate-500 text-sm font-medium">
+                          No registrations found.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
-              </div>
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50 rounded-b-[2.5rem]">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
-                  <select
-                    value={itemsPerPage}
-                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                    className="bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 text-slate-900 dark:text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs text-slate-500 font-medium">
-                    Page <span className="text-slate-900 dark:text-white">{currentPage}</span> of {totalPages || 1}
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      disabled={currentPage <= 1}
-                      onClick={() => setCurrentPage(prev => prev - 1)}
-                      className="p-2 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all text-slate-600 dark:text-slate-400"
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                      className="bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
                     >
-                      <ChevronLeft size={18} />
-                    </button>
-                    <button
-                      disabled={currentPage >= totalPages}
-                      onClick={() => setCurrentPage(prev => prev + 1)}
-                      className="p-2 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all text-slate-600 dark:text-slate-400"
-                    >
-                      <ChevronRight size={18} />
-                    </button>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
                   </div>
-                </div>
-              </div>
-            </div>
-          ) : activeTab === 'list' ? (
-            <div className="overflow-x-auto rounded-3xl border border-slate-200 dark:border-white/5">
-              <table className="w-full text-left">
-                <thead className="bg-slate-50 dark:bg-[#0b0d17] text-[10px] font-black uppercase text-slate-500 tracking-widest border-b border-slate-200 dark:border-white/5">
-                  <tr>
-                    <th className="px-8 py-5">Slot</th>
-                    <th className="px-8 py-5">Full Name</th>
-                    <th className="px-8 py-5">Voice Part</th>
-                    <th className="px-8 py-5 text-right">Registration Date</th>
-                    <th className="px-8 py-5 text-center w-24">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {paginated.map((r: any) => (
-                    <tr key={r.id} className="hover:bg-white/[0.01] transition-colors">
-                      <td className="px-8 py-5">
-                        <div className="w-10 h-10 bg-indigo-600/10 border border-indigo-500/20 rounded-xl flex items-center justify-center font-black text-indigo-400 text-xs">
-                          S-{r.slot_id}
-                        </div>
-                      </td>
-                      <td className="px-8 py-5">
-                        {editingId === r.id ? (
-                          <input
-                            value={editFullName}
-                            onChange={e => setEditFullName(e.target.value)}
-                            className="bg-white dark:bg-[#131521] border border-indigo-500/50 rounded-lg px-3 py-1.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-400 w-full"
-                          />
-                        ) : (
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{r.full_name}</span>
-                        )}
-                      </td>
-                      <td className="px-8 py-5">
-                        {editingId === r.id ? (
-                          <select
-                            value={editVoicePart}
-                            onChange={e => setEditVoicePart(e.target.value)}
-                            className="bg-white dark:bg-[#131521] border border-indigo-500/50 rounded-lg px-2 py-1.5 text-xs text-slate-900 dark:text-white outline-none focus:border-indigo-400"
-                          >
-                            {VOICE_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
-                          </select>
-                        ) : (
-                          <span className={cn(
-                            "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest",
-                            r.voice_part === 'Soprano' && "bg-rose-500/10 text-rose-400 border border-rose-500/20",
-                            r.voice_part === 'Alto' && "bg-amber-500/10 text-amber-400 border border-amber-500/20",
-                            r.voice_part === 'Tenor' && "bg-sky-500/10 text-sky-400 border border-sky-500/20",
-                            r.voice_part === 'Bass' && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                          )}>
-                            {r.voice_part}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-8 py-5 text-right text-xs font-bold text-slate-500">
-                        {new Date(r.created_at).toLocaleDateString()} at {new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                      <td className="px-8 py-5 text-center">
-                        {editingId === r.id ? (
-                          <div className="flex items-center justify-center gap-2">
-                            <button disabled={savingId === r.id} onClick={handleSaveEdit} className="p-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors">
-                              {savingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                            </button>
-                            <button disabled={savingId === r.id} onClick={() => setEditingId(null)} className="p-1.5 bg-slate-500/10 text-slate-500 dark:text-slate-400 hover:bg-slate-500/20 rounded-lg transition-colors">
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center gap-2">
-                            <button onClick={() => handleEditClick(r)} disabled={deletingId === r.id} className="p-1.5 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors disabled:opacity-50">
-                              <Edit2 size={14} />
-                            </button>
-                            <button onClick={() => handleDeleteClick(r.id)} disabled={deletingId === r.id} className="p-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors disabled:opacity-50">
-                              {deletingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {paginated.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-8 py-8 text-center text-slate-500 text-sm font-medium">
-                        No registrations found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
-                  <select
-                    value={itemsPerPage}
-                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                    className="bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </div>
 
-                <div className="flex items-center gap-4">
-                  <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
-                    {filtered.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      disabled={currentPage === 1}
-                      onClick={() => setCurrentPage(p => p - 1)}
-                      className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
-                    >
-                      <ChevronLeft size={16} />
-                    </button>
-                    <button
-                      disabled={currentPage === totalPages || totalPages === 0}
-                      onClick={() => setCurrentPage(p => p + 1)}
-                      className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
-                    >
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : activeTab === 'checkin' ? (
-            <div className="space-y-8 max-w-4xl mx-auto py-8">
-              <div className="text-center space-y-4">
-                <div className="w-20 h-20 bg-emerald-500/20 rounded-[2rem] flex items-center justify-center mx-auto text-emerald-500 border border-emerald-500/30">
-                  <Check size={40} strokeWidth={3} />
-                </div>
-                <h3 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tighter">Fast Check-in</h3>
-                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Scan QR Code or Type Soloist ID for verification</p>
-              </div>
-
-              <div className="glass p-8 rounded-[3rem] border border-emerald-500/20 shadow-2xl space-y-8">
-                <div className="relative">
-                  <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600" size={24} />
-                  <input
-                    autoFocus
-                    placeholder="Scan or Enter ID..."
-                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border-2 border-slate-200 dark:border-white/5 rounded-[2rem] pl-16 pr-6 py-6 text-xl focus:border-emerald-500 outline-none transition-all placeholder:text-slate-700 font-bold text-center uppercase tracking-widest"
-                    onChange={(e) => {
-                      const val = e.target.value.trim();
-                      if (val.length >= 20) { // IDs are long UUIDs
-                        setSearchQuery(val);
-                      }
-                    }}
-                  />
-                </div>
-
-                {searchQuery && (
-                  <AnimatePresence mode="wait">
-                    {registrations.filter(r => r.id === searchQuery).length > 0 ? (
-                      registrations.filter(r => r.id === searchQuery).map(r => (
-                        <motion.div
-                          key={r.id}
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="bg-emerald-500/10 border border-emerald-500/20 rounded-[2.5rem] p-10 space-y-8 text-center"
-                        >
-                          <div className="space-y-4">
-                            <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/40">
-                              <Check size={32} className="text-slate-900" strokeWidth={4} />
-                            </div>
-                            <div>
-                              <h4 className="text-4xl font-black text-slate-900 dark:text-white uppercase italic leading-tight">{r.full_name}</h4>
-                              <p className="text-lg font-bold text-emerald-500 uppercase tracking-[0.3em] mt-2">Slot S-{r.slot_id} • {r.voice_part}</p>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-6">
-                            <div className="p-6 bg-white dark:bg-black/20 rounded-3xl border border-white/5">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Repertoire</p>
-                              <p className="text-sm font-bold text-slate-900 dark:text-white">
-                                {repertoires.find(rep => rep.registration_id === r.id && rep.status === 'approved')?.song_title || 'No Approved Song'}
-                              </p>
-                            </div>
-                            <div className="p-6 bg-white dark:bg-black/20 rounded-3xl border border-white/5">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Status</p>
-                              <p className="text-sm font-bold text-emerald-500 uppercase tracking-widest">Verified</p>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={() => {
-                              alert("Check-in Successful!");
-                              setSearchQuery('');
-                            }}
-                            className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-black py-6 rounded-[2rem] text-xl transition-all shadow-xl shadow-emerald-500/30 uppercase italic"
-                          >
-                            Confirm Arrival
-                          </button>
-                        </motion.div>
-                      ))
-                    ) : (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="text-center py-10"
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                      {filtered.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(p => p - 1)}
+                        className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
                       >
-                        <p className="text-slate-500 font-bold uppercase tracking-widest italic">No match found for this ID</p>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                )}
-              </div>
-            </div>
-          ) : activeTab === 'waitlist' ? (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-rose-500/20 rounded-xl flex items-center justify-center text-rose-500">
-                    <Grid size={20} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Waitlist Queue</h3>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{waitlist.length} soloists waiting</p>
+                        <ChevronLeft size={16} />
+                      </button>
+                      <button
+                        disabled={currentPage === totalPages || totalPages === 0}
+                        onClick={() => setCurrentPage(p => p + 1)}
+                        className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
+            ) : activeTab === 'checkin' ? (
+              <div className="space-y-8 max-w-4xl mx-auto py-8">
+                <div className="text-center space-y-4">
+                  <div className="w-20 h-20 bg-emerald-500/20 rounded-[2rem] flex items-center justify-center mx-auto text-emerald-500 border border-emerald-500/30">
+                    <Check size={40} strokeWidth={3} />
+                  </div>
+                  <h3 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tighter">Fast Check-in</h3>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Scan QR Code or Type Soloist ID for verification</p>
+                </div>
 
-              <div className="bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[2rem] overflow-hidden shadow-2xl">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/5">
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Pos</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Name</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Voice</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Contact</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Joined</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-white/5">
-                      {waitlist.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="px-6 py-20 text-center text-slate-500 font-bold uppercase tracking-widest text-xs">
-                            No one on the waitlist
-                          </td>
-                        </tr>
+                <div className="glass p-8 rounded-[3rem] border border-emerald-500/20 shadow-2xl space-y-8">
+                  <div className="relative">
+                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-600" size={24} />
+                    <input
+                      autoFocus
+                      placeholder="Scan or Enter ID..."
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border-2 border-slate-200 dark:border-white/5 rounded-[2rem] pl-16 pr-6 py-6 text-xl focus:border-emerald-500 outline-none transition-all placeholder:text-slate-700 font-bold text-center uppercase tracking-widest"
+                      onChange={(e) => {
+                        const val = e.target.value.trim();
+                        if (val.length >= 20) { // IDs are long UUIDs
+                          setSearchQuery(val);
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {searchQuery && (
+                    <AnimatePresence mode="wait">
+                      {registrations.filter(r => r.id === searchQuery).length > 0 ? (
+                        registrations.filter(r => r.id === searchQuery).map(r => (
+                          <motion.div
+                            key={r.id}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="bg-emerald-500/10 border border-emerald-500/20 rounded-[2.5rem] p-10 space-y-8 text-center"
+                          >
+                            <div className="space-y-4">
+                              <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/40">
+                                <Check size={32} className="text-slate-900" strokeWidth={4} />
+                              </div>
+                              <div>
+                                <h4 className="text-4xl font-black text-slate-900 dark:text-white uppercase italic leading-tight">{r.full_name}</h4>
+                                <p className="text-lg font-bold text-emerald-500 uppercase tracking-[0.3em] mt-2">Slot S-{r.slot_id} • {r.voice_part}</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-6">
+                              <div className="p-6 bg-white dark:bg-black/20 rounded-3xl border border-white/5">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Repertoire</p>
+                                <p className="text-sm font-bold text-slate-900 dark:text-white">
+                                  {repertoires.find(rep => rep.registration_id === r.id && rep.status === 'approved')?.song_title || 'No Approved Song'}
+                                </p>
+                              </div>
+                              <div className="p-6 bg-white dark:bg-black/20 rounded-3xl border border-white/5">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Status</p>
+                                <p className="text-sm font-bold text-emerald-500 uppercase tracking-widest">Verified</p>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                alert("Check-in Successful!");
+                                setSearchQuery('');
+                              }}
+                              className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-black py-6 rounded-[2rem] text-xl transition-all shadow-xl shadow-emerald-500/30 uppercase italic"
+                            >
+                              Confirm Arrival
+                            </button>
+                          </motion.div>
+                        ))
                       ) : (
-                        waitlist.map((w, idx) => (
-                          <tr key={w.id} className="group hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
-                            <td className="px-6 py-4">
-                              <span className="text-xs font-black text-slate-400">#{idx + 1}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="font-bold text-slate-900 dark:text-white text-sm">{w.full_name}</div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={cn(
-                                "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
-                                w.voice_part === 'Soprano' ? "bg-rose-500/10 text-rose-500" :
-                                  w.voice_part === 'Alto' ? "bg-amber-500/10 text-amber-500" :
-                                    w.voice_part === 'Tenor' ? "bg-sky-500/10 text-sky-500" :
-                                      "bg-emerald-500/10 text-emerald-500"
-                              )}>
-                                {w.voice_part}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="space-y-0.5">
-                                {w.phone && <div className="text-[10px] text-slate-500 font-medium">{w.phone}</div>}
-                                {w.email && <div className="text-[10px] text-slate-400">{w.email}</div>}
-                                {!w.phone && !w.email && <div className="text-[10px] text-slate-600 italic">None Provided</div>}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="text-[10px] text-slate-500 font-medium">
-                                {new Date(w.created_at).toLocaleDateString()}
-                              </div>
-                              <div className="text-[9px] text-slate-600">
-                                {new Date(w.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="flex justify-end gap-2">
-                                <button
-                                  onClick={() => handlePromoteWaitlist(w)}
-                                  disabled={bulkActionLoading || stats.total >= maxSlots}
-                                  className="px-4 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-30"
-                                >
-                                  {bulkActionLoading ? '...' : 'Promote'}
-                                </button>
-                                <button
-                                  onClick={() => handleRemoveWaitlist(w.id, w.full_name)}
-                                  disabled={bulkActionLoading}
-                                  className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 rounded-xl transition-all"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="text-center py-10"
+                        >
+                          <p className="text-slate-500 font-bold uppercase tracking-widest italic">No match found for this ID</p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  )}
+                </div>
+              </div>
+            ) : activeTab === 'waitlist' ? (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-rose-500/20 rounded-xl flex items-center justify-center text-rose-500">
+                      <Grid size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Waitlist Queue</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{waitlist.length} soloists waiting</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[2rem] overflow-hidden shadow-2xl">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/5">
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Pos</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Name</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Voice</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Contact</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Joined</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-white/5">
+                        {waitlist.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-6 py-20 text-center text-slate-500 font-bold uppercase tracking-widest text-xs">
+                              No one on the waitlist
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                        ) : (
+                          waitlist.map((w, idx) => (
+                            <tr key={w.id} className="group hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                              <td className="px-6 py-4">
+                                <span className="text-xs font-black text-slate-400">#{idx + 1}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="font-bold text-slate-900 dark:text-white text-sm">{w.full_name}</div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={cn(
+                                  "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
+                                  w.voice_part === 'Soprano' ? "bg-rose-500/10 text-rose-500" :
+                                    w.voice_part === 'Alto' ? "bg-amber-500/10 text-amber-500" :
+                                      w.voice_part === 'Tenor' ? "bg-sky-500/10 text-sky-500" :
+                                        "bg-emerald-500/10 text-emerald-500"
+                                )}>
+                                  {w.voice_part}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="space-y-0.5">
+                                  {w.phone && <div className="text-[10px] text-slate-500 font-medium">{w.phone}</div>}
+                                  {w.email && <div className="text-[10px] text-slate-400">{w.email}</div>}
+                                  {!w.phone && !w.email && <div className="text-[10px] text-slate-600 italic">None Provided</div>}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="text-[10px] text-slate-500 font-medium">
+                                  {new Date(w.created_at).toLocaleDateString()}
+                                </div>
+                                <div className="text-[9px] text-slate-600">
+                                  {new Date(w.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    onClick={() => handlePromoteWaitlist(w)}
+                                    disabled={bulkActionLoading || stats.total >= maxSlots}
+                                    className="px-4 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-30"
+                                  >
+                                    {bulkActionLoading ? '...' : 'Promote'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleRemoveWaitlist(w.id, w.full_name)}
+                                    disabled={bulkActionLoading}
+                                    className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 rounded-xl transition-all"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : activeTab === 'analytics' ? (
-            <AnalyticsView registrations={registrations} repertoires={repertoires} />
-          ) : activeTab === 'live' ? (
-            <LiveModeView
-              registrations={registrations}
-              performanceWeeks={performanceWeeks}
-              onUpdateStatus={async (id: string, status: string) => {
-                try {
-                  await updatePerformanceStatus(id, status);
-                  await fetchData();
-                } catch (err: any) {
-                  console.error(err);
-                  alert("Database Error: " + (err.message || "Failed to update status. Please ensure the 'performance_status' column exists in your registrations table."));
-                }
-              }}
-              onResetStatus={async () => {
-                try {
-                  await resetPerformanceStatus();
-                  await fetchData();
-                } catch (err: any) {
-                  console.error(err);
-                  alert("Failed to reset: " + (err.message || "Unknown error"));
-                }
-              }}
-            />
-          ) : activeTab === 'repertoire' ? (
-            <div className="space-y-6">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-6">
-                <div className="flex items-center gap-3">
-                  <Music size={24} className="text-indigo-400" />
-                  <h3 className="text-2xl font-black text-white tracking-tight">Review Repertoires</h3>
+            ) : activeTab === 'analytics' ? (
+              <AnalyticsView registrations={registrations} repertoires={repertoires} />
+            ) : activeTab === 'live' ? (
+              <LiveModeView
+                registrations={registrations}
+                performanceWeeks={performanceWeeks}
+                onUpdateStatus={async (id: string, status: string) => {
+                  try {
+                    await updatePerformanceStatus(id, status);
+                    await fetchData();
+                  } catch (err: any) {
+                    console.error(err);
+                    alert("Database Error: " + (err.message || "Failed to update status. Please ensure the 'performance_status' column exists in your registrations table."));
+                  }
+                }}
+                onResetStatus={async () => {
+                  try {
+                    await resetPerformanceStatus();
+                    await fetchData();
+                  } catch (err: any) {
+                    console.error(err);
+                    alert("Failed to reset: " + (err.message || "Unknown error"));
+                  }
+                }}
+              />
+            ) : activeTab === 'repertoire' ? (
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-6">
+                  <div className="flex items-center gap-3">
+                    <Music size={24} className="text-indigo-400" />
+                    <h3 className="text-2xl font-black text-white tracking-tight">Review Repertoires</h3>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                    {selectedRepertoires.length > 0 && (
+                      <div className="flex items-center gap-2 mr-4 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-xl">
+                        <span className="text-xs font-bold text-indigo-400">{selectedRepertoires.length} selected</span>
+                        <button
+                          onClick={handleBulkApprove}
+                          disabled={bulkActionLoading}
+                          className="p-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-md transition-colors disabled:opacity-50 ml-2" title="Approve Selected">
+                          {bulkActionLoading ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                        </button>
+                        <button
+                          onClick={handleBulkDelete}
+                          disabled={bulkActionLoading}
+                          className="p-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-md transition-colors disabled:opacity-50" title="Delete Selected">
+                          {bulkActionLoading ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleResetAllSongs}
+                      disabled={bulkActionLoading}
+                      className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 rounded-xl text-xs font-bold transition-all disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {bulkActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      Factory Reset Repertoires
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                  {selectedRepertoires.length > 0 && (
-                    <div className="flex items-center gap-2 mr-4 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-xl">
-                      <span className="text-xs font-bold text-indigo-400">{selectedRepertoires.length} selected</span>
-                      <button
-                        onClick={handleBulkApprove}
-                        disabled={bulkActionLoading}
-                        className="p-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-md transition-colors disabled:opacity-50 ml-2" title="Approve Selected">
-                        {bulkActionLoading ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                      </button>
-                      <button
-                        onClick={handleBulkDelete}
-                        disabled={bulkActionLoading}
-                        className="p-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-md transition-colors disabled:opacity-50" title="Delete Selected">
-                        {bulkActionLoading ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                      </button>
-                    </div>
-                  )}
+                {repertoires.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500">
+                    <p>No songs have been submitted for review yet.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-white/5">
+                          <th className="py-4 px-4 w-12">
+                            <input
+                              type="checkbox"
+                              checked={paginated.length > 0 && paginated.every((group: any) => group.songs.every((s: any) => selectedRepertoires.includes(s.id)))}
+                              ref={el => {
+                                if (el) {
+                                  const allDisplayedSelected = paginated.length > 0 && paginated.every((group: any) => group.songs.every((s: any) => selectedRepertoires.includes(s.id)));
+                                  const someDisplayedSelected = paginated.some((group: any) => group.songs.some((s: any) => selectedRepertoires.includes(s.id)));
+                                  el.indeterminate = someDisplayedSelected && !allDisplayedSelected;
+                                }
+                              }}
+                              onChange={handleSelectAllRepertoires}
+                              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
+                            />
+                          </th>
+                          <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest">Soloist</th>
+                          <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[150px]">Song</th>
+                          <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Links / Summary</th>
+                          <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      {paginated.map((group: any) => {
+                        const allSelected = group.songs.every((s: any) => selectedRepertoires.includes(s.id));
+                        const someSelected = group.songs.some((s: any) => selectedRepertoires.includes(s.id));
 
-                  <button
-                    onClick={handleResetAllSongs}
-                    disabled={bulkActionLoading}
-                    className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 rounded-xl text-xs font-bold transition-all disabled:opacity-50 whitespace-nowrap"
-                  >
-                    {bulkActionLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    Factory Reset Repertoires
-                  </button>
-                </div>
-              </div>
-
-              {repertoires.length === 0 ? (
-                <div className="py-12 text-center text-slate-500">
-                  <p>No songs have been submitted for review yet.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto custom-scrollbar">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-white/5">
-                        <th className="py-4 px-4 w-12">
-                          <input
-                            type="checkbox"
-                            checked={paginated.length > 0 && paginated.every((group: any) => group.songs.every((s: any) => selectedRepertoires.includes(s.id)))}
-                            ref={el => {
-                              if (el) {
-                                const allDisplayedSelected = paginated.length > 0 && paginated.every((group: any) => group.songs.every((s: any) => selectedRepertoires.includes(s.id)));
-                                const someDisplayedSelected = paginated.some((group: any) => group.songs.some((s: any) => selectedRepertoires.includes(s.id)));
-                                el.indeterminate = someDisplayedSelected && !allDisplayedSelected;
-                              }
-                            }}
-                            onChange={handleSelectAllRepertoires}
-                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
-                          />
-                        </th>
-                        <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest">Soloist</th>
-                        <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[150px]">Song</th>
-                        <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest min-w-[200px]">Links / Summary</th>
-                        <th className="py-4 px-4 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    {paginated.map((group: any) => {
-                      const allSelected = group.songs.every((s: any) => selectedRepertoires.includes(s.id));
-                      const someSelected = group.songs.some((s: any) => selectedRepertoires.includes(s.id));
-
-                      return (
-                        <tbody key={group.registration_id} className={cn("border-b border-white/5 transition-colors group/body", someSelected ? "bg-indigo-500/5" : "hover:bg-white/[0.02]")}>
-                          {group.songs.map((r: any, idx: number) => {
-                            const status = r.status || 'pending';
-                            return (
-                              <tr key={r.id}>
-                                {idx === 0 && (
-                                  <>
-                                    <td rowSpan={group.songs.length} className="py-4 px-4 align-top w-12 border-r border-white/5">
-                                      <input
-                                        type="checkbox"
-                                        checked={allSelected}
-                                        ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
-                                        onChange={() => {
-                                          if (allSelected) {
-                                            setSelectedRepertoires(prev => prev.filter(id => !group.songs.find((s: any) => s.id === id)));
-                                          } else {
-                                            const newIds = group.songs.map((s: any) => s.id).filter((id: string) => !selectedRepertoires.includes(id));
-                                            setSelectedRepertoires(prev => [...prev, ...newIds]);
-                                          }
-                                        }}
-                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer mt-1"
-                                      />
-                                    </td>
-                                    <td rowSpan={group.songs.length} className="py-4 px-4 align-top border-r border-white/5">
-                                      <div className="font-bold text-black dark:text-white whitespace-nowrap mt-0.5">{group.registrations?.full_name}</div>
-                                      <div className="text-[10px] text-black dark:text-slate-500 mt-1 uppercase">Slot {group.registrations?.slot_id} • {group.registrations?.voice_part}</div>
-                                    </td>
-                                  </>
-                                )}
-                                <td className={cn("py-4 px-4 align-top", idx !== 0 && "border-t border-white/5")}>
-                                  <div className="font-bold text-indigo-400">{r.song_title}</div>
-                                  <div className="text-xs text-slate-400 italic mt-1">{r.artist_composer}</div>
-                                </td>
-                                <td className={cn("py-4 px-4 text-xs text-slate-400 leading-relaxed max-w-[300px] break-words align-top", idx !== 0 && "border-t border-white/5")}>
-                                  {(r.song_link || r.score_link) && (
-                                    <div className="flex gap-4 mb-2">
-                                      {r.song_link && <a href={r.song_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sky-400 hover:text-sky-300 transition-colors uppercase tracking-widest font-black text-[10px] bg-sky-500/10 px-2 py-0.5 rounded"><LinkIcon size={10} /> Audio</a>}
-                                      {r.score_link && <a href={r.score_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-rose-400 hover:text-rose-300 transition-colors uppercase tracking-widest font-black text-[10px] bg-rose-500/10 px-2 py-0.5 rounded"><ExternalLink size={10} /> Score</a>}
-                                    </div>
+                        return (
+                          <tbody key={group.registration_id} className={cn("border-b border-white/5 transition-colors group/body", someSelected ? "bg-indigo-500/5" : "hover:bg-white/[0.02]")}>
+                            {group.songs.map((r: any, idx: number) => {
+                              const status = r.status || 'pending';
+                              return (
+                                <tr key={r.id}>
+                                  {idx === 0 && (
+                                    <>
+                                      <td rowSpan={group.songs.length} className="py-4 px-4 align-top w-12 border-r border-white/5">
+                                        <input
+                                          type="checkbox"
+                                          checked={allSelected}
+                                          ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
+                                          onChange={() => {
+                                            if (allSelected) {
+                                              setSelectedRepertoires(prev => prev.filter(id => !group.songs.find((s: any) => s.id === id)));
+                                            } else {
+                                              const newIds = group.songs.map((s: any) => s.id).filter((id: string) => !selectedRepertoires.includes(id));
+                                              setSelectedRepertoires(prev => [...prev, ...newIds]);
+                                            }
+                                          }}
+                                          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer mt-1"
+                                        />
+                                      </td>
+                                      <td rowSpan={group.songs.length} className="py-4 px-4 align-top border-r border-white/5">
+                                        <div className="font-bold text-black dark:text-white whitespace-nowrap mt-0.5">{group.registrations?.full_name}</div>
+                                        <div className="text-[10px] text-black dark:text-slate-500 mt-1 uppercase">Slot {group.registrations?.slot_id} • {group.registrations?.voice_part}</div>
+                                      </td>
+                                    </>
                                   )}
-                                  {r.song_summary}
-                                </td>
-                                <td className={cn("py-4 px-4 align-top", idx !== 0 && "border-t border-white/5")}>
-                                  <div className="flex items-center justify-end gap-2">
-                                    {status === 'approved' ? (
-                                      <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                                        <Check size={12} /> Approved
-                                      </span>
-                                    ) : status === 'rejected' ? (
-                                      <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                                        <X size={12} /> Rejected
-                                      </span>
-                                    ) : (
-                                      <>
-                                        <button
-                                          onClick={() => handleApproveSong(r.id, r.registration_id)}
-                                          disabled={approvingId === r.id || rejectingId === r.id || deletingRepId === r.id}
-                                          className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg transition-colors border border-emerald-500/20 disabled:opacity-50" title="Approve">
-                                          {approvingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                                        </button>
-                                        <button
-                                          onClick={() => handleRejectSong(r.id)}
-                                          disabled={rejectingId === r.id || approvingId === r.id || deletingRepId === r.id}
-                                          className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors border border-rose-500/20 disabled:opacity-50" title="Reject">
-                                          {rejectingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteSong(r.id)}
-                                          disabled={deletingRepId === r.id || rejectingId === r.id || approvingId === r.id}
-                                          className="p-2 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-lg transition-colors border border-slate-500/20 disabled:opacity-50" title="Delete">
-                                          {deletingRepId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                                        </button>
-                                      </>
+                                  <td className={cn("py-4 px-4 align-top", idx !== 0 && "border-t border-white/5")}>
+                                    <div className="font-bold text-indigo-400">{r.song_title}</div>
+                                    <div className="text-xs text-slate-400 italic mt-1">{r.artist_composer}</div>
+                                  </td>
+                                  <td className={cn("py-4 px-4 text-xs text-slate-400 leading-relaxed max-w-[300px] break-words align-top", idx !== 0 && "border-t border-white/5")}>
+                                    {(r.song_link || r.score_link) && (
+                                      <div className="flex gap-4 mb-2">
+                                        {r.song_link && <a href={r.song_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sky-400 hover:text-sky-300 transition-colors uppercase tracking-widest font-black text-[10px] bg-sky-500/10 px-2 py-0.5 rounded"><LinkIcon size={10} /> Audio</a>}
+                                        {r.score_link && <a href={r.score_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-rose-400 hover:text-rose-300 transition-colors uppercase tracking-widest font-black text-[10px] bg-rose-500/10 px-2 py-0.5 rounded"><ExternalLink size={10} /> Score</a>}
+                                      </div>
                                     )}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      );
-                    })}
-                  </table>
-                  <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
-                      <select
-                        value={itemsPerPage}
-                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                        className="bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
-                      >
-                        <option value={10}>10</option>
-                        <option value={20}>20</option>
-                        <option value={50}>50</option>
-                        <option value={100}>100</option>
-                      </select>
-                    </div>
+                                    {r.song_summary}
+                                  </td>
+                                  <td className={cn("py-4 px-4 align-top", idx !== 0 && "border-t border-white/5")}>
+                                    <div className="flex items-center justify-end gap-2">
+                                      {status === 'approved' ? (
+                                        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                          <Check size={12} /> Approved
+                                        </span>
+                                      ) : status === 'rejected' ? (
+                                        <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                          <X size={12} /> Rejected
+                                        </span>
+                                      ) : (
+                                        <>
+                                          <button
+                                            onClick={() => handleApproveSong(r.id, r.registration_id)}
+                                            disabled={approvingId === r.id || rejectingId === r.id || deletingRepId === r.id}
+                                            className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg transition-colors border border-emerald-500/20 disabled:opacity-50" title="Approve">
+                                            {approvingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                                          </button>
+                                          <button
+                                            onClick={() => handleRejectSong(r.id)}
+                                            disabled={rejectingId === r.id || approvingId === r.id || deletingRepId === r.id}
+                                            className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-colors border border-rose-500/20 disabled:opacity-50" title="Reject">
+                                            {rejectingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteSong(r.id)}
+                                            disabled={deletingRepId === r.id || rejectingId === r.id || approvingId === r.id}
+                                            className="p-2 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-lg transition-colors border border-slate-500/20 disabled:opacity-50" title="Delete">
+                                            {deletingRepId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        );
+                      })}
+                    </table>
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
+                        <select
+                          value={itemsPerPage}
+                          onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                          className="bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                        >
+                          <option value={10}>10</option>
+                          <option value={20}>20</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
 
-                    <div className="flex items-center gap-4">
-                      <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
-                        {submittedRepertoires.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, submittedRepertoires.length)} of {submittedRepertoires.length}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          disabled={currentPage === 1}
-                          onClick={() => setCurrentPage(p => p - 1)}
-                          className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
-                        >
-                          <ChevronLeft size={16} />
-                        </button>
-                        <button
-                          disabled={currentPage === totalPages || totalPages === 0}
-                          onClick={() => setCurrentPage(p => p + 1)}
-                          className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
-                        >
-                          <ChevronRight size={16} />
-                        </button>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                          {submittedRepertoires.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, submittedRepertoires.length)} of {submittedRepertoires.length}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(p => p - 1)}
+                            className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
+                          >
+                            <ChevronLeft size={16} />
+                          </button>
+                          <button
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(p => p + 1)}
+                            className="p-2 bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white disabled:opacity-30 transition-all active:scale-95 flex items-center justify-center"
+                          >
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="max-w-md space-y-10 py-10">
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 mb-2">
-                  <Settings size={18} className="text-indigo-400" />
-                  <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">Capacity Management</h4>
-                </div>
-                <p className="text-xs text-slate-500 leading-relaxed px-1">Adjust the total number of registration slots available for this event.</p>
-                <div className="flex gap-4">
-                  <input
-                    type="number"
-                    value={maxSlots}
-                    onChange={e => setMaxSlots(parseInt(e.target.value))}
-                    className="flex-1 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all font-bold"
-                  />
-                  <button onClick={() => updateMaxSlots(maxSlots)} className="px-8 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-500 transition-all uppercase tracking-tighter italic">Update</button>
-                </div>
+                )}
               </div>
+            ) : (
+              <div className="max-w-md space-y-10 py-10">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Settings size={18} className="text-indigo-400" />
+                    <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">Capacity Management</h4>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed px-1">Adjust the total number of registration slots available for this event.</p>
+                  <div className="flex gap-4">
+                    <input
+                      type="number"
+                      value={maxSlots}
+                      onChange={e => setMaxSlots(parseInt(e.target.value))}
+                      className="flex-1 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all font-bold"
+                    />
+                    <button onClick={() => updateMaxSlots(maxSlots)} className="px-8 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-500 transition-all uppercase tracking-tighter italic">Update</button>
+                  </div>
+                </div>
 
-              <div className="p-8 bg-indigo-500/5 rounded-[2.5rem] border border-indigo-500/10 mt-8">
-                <PositionManager positions={positions} onRefresh={fetchData} />
+                <div className="p-8 bg-indigo-500/5 rounded-[2.5rem] border border-indigo-500/10 mt-8">
+                  <PositionManager positions={positions} onRefresh={fetchData} />
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       <AnimatePresence>
