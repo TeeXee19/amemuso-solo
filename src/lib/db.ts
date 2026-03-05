@@ -29,12 +29,16 @@ export const registerSoloist = async (fullName: string, voicePart: string, slotI
     return data;
 };
 
-export const updateMaxSlots = async (newLimit: number) => {
+export const updateConfig = async (key: string, value: string) => {
     const { error } = await supabase
         .from('config')
-        .update({ value: newLimit.toString() })
-        .eq('key', 'max_slots');
+        .update({ value })
+        .eq('key', key);
     if (error) throw error;
+};
+
+export const updateMaxSlots = async (newLimit: number) => {
+    await updateConfig('max_slots', newLimit.toString());
 };
 
 export const editRegistration = async (id: string, fullName: string, voicePart: string) => {
@@ -343,6 +347,10 @@ export const updateMember = async (id: string, updates: any) => {
         .select();
     if (error) throw error;
     return data;
+};
+
+export const promoteMemberToFull = async (id: string) => {
+    return updateMember(id, { is_on_probation: false, probation_until: null });
 };
 
 export const deleteMember = async (id: string) => {

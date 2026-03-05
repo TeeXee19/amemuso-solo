@@ -4,16 +4,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeCanvas } from 'qrcode.react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import {
-  getConfigs, getRegistrations, registerSoloist, updateMaxSlots, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires, updatePerformanceStatus, resetPerformanceStatus,
+  getConfigs, getRegistrations, registerSoloist, updateMaxSlots, updateConfig, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires, updatePerformanceStatus, resetPerformanceStatus,
   getPerformanceWeeks,
   getWaitlist, joinWaitlist, deleteWaitlistEntry, getAdminUser,
-  getMembers, addMember, updateMember, deleteMember, importRegistrationsToMembers, uploadMemberPhoto,
+  getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers, uploadMemberPhoto,
   getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory
 } from './lib/db';
 import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
   Users, Trash2, Loader2, X, Check, Music, Sun, Monitor, Moon, Edit2, Plus, Camera,
-  Calendar, Briefcase, History
+  Calendar, Briefcase, History, ShieldAlert, Archive
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -46,11 +46,11 @@ function ErrorFallback() {
   );
 }
 
-function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading }: any) {
+function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading, icon: Icon = Trash2, confirmText = 'Confirm', color = 'bg-rose-500', hideCancel = false }: any) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -58,25 +58,30 @@ function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading }: a
         className="w-full max-w-sm overflow-hidden bg-white dark:bg-[#131521] rounded-3xl shadow-2xl border border-slate-200 dark:border-white/10"
       >
         <div className="p-6">
-          <div className="w-12 h-12 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center mb-4">
-            <Trash2 size={24} />
+          <div className={cn("w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-opacity-10", color.replace('bg-', 'text-'))}>
+            <Icon size={24} />
           </div>
           <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">{title}</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-8">{message}</p>
           <div className="flex gap-3">
+            {!hideCancel && (
+              <button
+                onClick={onClose}
+                disabled={loading}
+                className="flex-1 py-3 px-4 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            )}
             <button
-              onClick={onClose}
+              onClick={() => {
+                onConfirm();
+                if (!loading) onClose();
+              }}
               disabled={loading}
-              className="flex-1 py-3 px-4 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-50"
+              className={cn("flex-1 py-3 px-4 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2", color, color === 'bg-rose-500' ? 'hover:bg-rose-400' : 'hover:opacity-90')}
             >
-              Cancel
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={loading}
-              className="flex-1 py-3 px-4 rounded-xl text-sm font-bold bg-rose-500 hover:bg-rose-400 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {loading ? <Loader2 size={16} className="animate-spin" /> : 'Confirm'}
+              {loading ? <Loader2 size={16} className="animate-spin" /> : confirmText}
             </button>
           </div>
         </div>
@@ -85,18 +90,13 @@ function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading }: a
   );
 }
 
-function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, loading, positions = [] }: any) {
+function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, loading, positions = [], setConfirmModal }: any) {
   const [form, setForm] = useState({
-    full_name: '',
-    voice_part: 'Soprano',
-    bio: '',
-    photo_url: '',
-    phone: '',
-    email: '',
-    joined_at: new Date().toISOString().split('T')[0],
     position_id: '',
     registration_id: '',
-    is_soloist: false
+    is_soloist: false,
+    is_on_probation: false,
+    probation_until: ''
   });
 
   const [uploading, setUploading] = useState(false);
@@ -113,7 +113,9 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
         joined_at: member.joined_at || new Date().toISOString().split('T')[0],
         position_id: member.position_id || '',
         registration_id: member.registration_id || '',
-        is_soloist: member.is_soloist || false
+        is_soloist: member.is_soloist || false,
+        is_on_probation: member.is_on_probation || false,
+        probation_until: member.probation_until || ''
       });
     } else {
       setForm({
@@ -126,7 +128,9 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
         joined_at: new Date().toISOString().split('T')[0],
         position_id: '',
         registration_id: '',
-        is_soloist: false
+        is_soloist: false,
+        is_on_probation: false,
+        probation_until: ''
       });
     }
   }, [member, isOpen]);
@@ -141,7 +145,16 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
       setForm(prev => ({ ...prev, photo_url: url }));
     } catch (err: any) {
       console.error(err);
-      alert("Upload failed: " + (err.message || "Unknown error"));
+      setConfirmModal({
+        isOpen: true,
+        title: "Upload Failed",
+        message: "Upload failed: " + (err.message || "Unknown error"),
+        icon: ShieldAlert,
+        confirmText: "Close",
+        color: "bg-slate-600",
+        hideCancel: true,
+        onConfirm: () => { }
+      });
     } finally {
       setUploading(false);
     }
@@ -315,6 +328,46 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
                     </select>
                   </div>
                 )}
+
+                <div className="flex items-center justify-between pt-2 border-t border-indigo-500/10">
+                  <div className="flex items-center gap-2">
+                    <History size={14} className="text-slate-500" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">On Probation?</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newProbation = !form.is_on_probation;
+                      let until = form.probation_until;
+                      if (newProbation && !until) {
+                        const d = new Date(form.joined_at);
+                        d.setMonth(d.getMonth() + 3);
+                        until = d.toISOString().split('T')[0];
+                      }
+                      setForm({ ...form, is_on_probation: newProbation, probation_until: until });
+                    }}
+                    className={cn(
+                      "w-12 h-6 rounded-full transition-all relative",
+                      form.is_on_probation ? "bg-amber-500" : "bg-slate-300 dark:bg-white/10"
+                    )}
+                  >
+                    <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all", form.is_on_probation ? "left-7" : "left-1")} />
+                  </button>
+                </div>
+
+                {form.is_on_probation && (
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-amber-500">Probation Period Until</label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500/50" size={12} />
+                      <input
+                        type="date"
+                        value={form.probation_until}
+                        onChange={e => setForm({ ...form, probation_until: e.target.value })}
+                        className="w-full bg-white dark:bg-[#131521] border border-amber-500/20 rounded-lg pl-9 pr-3 py-2 text-xs focus:border-amber-500 outline-none font-bold text-amber-600"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -350,6 +403,7 @@ function AdminSidebar({ activeTab, setActiveTab, repertoires, waitlist, onLogout
     { id: 'waitlist', label: 'Waitlist', icon: History, badge: waitlist.length },
     { id: 'analytics', label: 'Analytics', icon: Activity },
     { id: 'live', label: 'Stage Mode', icon: Monitor },
+    { id: 'archives', label: 'Archives', icon: Archive },
     { id: 'settings', label: 'App Settings', icon: Settings },
   ];
 
@@ -676,7 +730,7 @@ function Layout({ children, subtitle, isAuthenticated, onLogout, sidebar }: any)
 
 // --- Public View ---
 
-function PublicView() {
+function PublicView({ setConfirmModal }: { setConfirmModal: any }) {
   const [activeVoiceTab, setActiveVoiceTab] = useState('All');
   const [maxSlots, setMaxSlots] = useState(70);
   const [registrations, setRegistrations] = useState<any[]>([]);
@@ -751,6 +805,16 @@ function PublicView() {
       }, 3000);
     } catch (err: any) {
       console.error('Failed to sync with server:', err);
+      setConfirmModal({
+        isOpen: true,
+        title: "Registration Failed",
+        message: "Failed to sync with server: " + (err.message || "Unknown error"),
+        icon: ShieldAlert,
+        confirmText: "Close",
+        color: "bg-slate-600",
+        hideCancel: true,
+        onConfirm: () => { }
+      });
     } finally {
       setSubmitting(false);
     }
@@ -1372,7 +1436,7 @@ function SoloistStatusView() {
 }
 // --- Members View (Phase 5) ---
 
-function MemberProfileModal({ member, isOpen, onClose }: any) {
+function MemberProfileModal({ member, isOpen, onClose, setConfirmModal }: any) {
   if (!member || !isOpen) return null;
 
   const avatarUrl = member.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(member.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
@@ -1412,6 +1476,93 @@ function MemberProfileModal({ member, isOpen, onClose }: any) {
             </div>
             <p className="text-indigo-500 dark:text-indigo-400 font-bold uppercase tracking-widest text-xs">{member.voice_part}</p>
           </div>
+
+          {member.is_on_probation && (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-slate-900 shadow-lg shadow-amber-500/20">
+                    <ShieldAlert size={20} strokeWidth={3} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-amber-600 uppercase tracking-widest leading-none mb-1">On Probation</p>
+                    <p className="text-[10px] text-slate-500 font-medium">Until {new Date(member.probation_until).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setConfirmModal({
+                      isOpen: true,
+                      title: "Admit Member",
+                      message: `Are you sure you want to admit ${member.full_name} as a full member of the chorale?`,
+                      icon: Check,
+                      confirmText: "Admit",
+                      color: "bg-emerald-500",
+                      onConfirm: () => {
+                        promoteMemberToFull(member.id);
+                        onClose();
+                      }
+                    });
+                  }}
+                  className="px-4 py-2 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all"
+                >
+                  Admit Member
+                </button>
+                <button
+                  onClick={async () => {
+                    const d = new Date(member.probation_until);
+                    d.setMonth(d.getMonth() + 1);
+                    const newDate = d.toISOString().split('T')[0];
+                    setConfirmModal({
+                      isOpen: true,
+                      title: "Extend Probation",
+                      message: `Extend probation for ${member.full_name} by 1 month (until ${newDate})?`,
+                      icon: Calendar,
+                      confirmText: "Extend",
+                      color: "bg-indigo-600",
+                      onConfirm: async () => {
+                        try {
+                          await updateMember(member.id, { probation_until: newDate });
+                          onClose();
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      }
+                    });
+                  }}
+                  className="px-4 py-2 bg-indigo-500/10 text-indigo-500 text-[10px] font-black uppercase tracking-widest rounded-xl border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-all"
+                >
+                  Extend
+                </button>
+                <button
+                  onClick={async () => {
+                    setConfirmModal({
+                      isOpen: true,
+                      title: "Archive Member",
+                      message: `Archive ${member.full_name}? They will be removed from the active member list but retained in the archives for future reference.`,
+                      icon: Trash2,
+                      confirmText: "Archive",
+                      color: "bg-rose-500",
+                      onConfirm: async () => {
+                        try {
+                          await updateMember(member.id, { is_archived: true });
+                          onClose();
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      }
+                    });
+                  }}
+                  className="px-4 py-2 bg-rose-500/10 text-rose-500 text-[10px] font-black uppercase tracking-widest rounded-xl border border-rose-500/20 hover:bg-rose-500 hover:text-white transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {member.bio && (
             <div className="space-y-2">
@@ -1465,8 +1616,8 @@ function MemberProfileModal({ member, isOpen, onClose }: any) {
             </div>
           )}
         </div>
-      </motion.div>
-    </div>
+      </motion.div >
+    </div >
   );
 }
 
@@ -1777,11 +1928,12 @@ function AnalyticsView({ registrations, repertoires }: { registrations: any[], r
   )
 }
 
-function LiveModeView({ registrations, performanceWeeks, onUpdateStatus, onResetStatus }: {
+function LiveModeView({ registrations, performanceWeeks, onUpdateStatus, onResetStatus, setConfirmModal }: {
   registrations: any[],
   performanceWeeks: any[],
   onUpdateStatus: (id: string, status: string) => Promise<void>,
-  onResetStatus: () => Promise<void>
+  onResetStatus: () => Promise<void>,
+  setConfirmModal: any
 }) {
   const [loading, setLoading] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
@@ -1871,11 +2023,19 @@ function LiveModeView({ registrations, performanceWeeks, onUpdateStatus, onReset
         <div className="flex items-center gap-3">
           <button
             onClick={async () => {
-              if (window.confirm("Are you sure you want to reset ALL performance statuses? This will move everyone back to 'Pending'.")) {
-                setResetting(true);
-                await onResetStatus();
-                setResetting(false);
-              }
+              setConfirmModal({
+                isOpen: true,
+                title: "Reset Stage Roster",
+                message: "Are you sure you want to reset ALL performance statuses? This will move everyone back to 'Pending'.",
+                icon: Trash2,
+                confirmText: "Reset All",
+                color: "bg-rose-500",
+                onConfirm: async () => {
+                  setResetting(true);
+                  await onResetStatus();
+                  setResetting(false);
+                }
+              });
             }}
             disabled={resetting}
             className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 text-rose-500 rounded-full border border-rose-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all disabled:opacity-50"
@@ -1995,7 +2155,7 @@ function LiveModeView({ registrations, performanceWeeks, onUpdateStatus, onReset
   )
 }
 
-function PositionManager({ positions, onRefresh }: { positions: any[], onRefresh: () => void }) {
+function PositionManager({ positions, onRefresh, setConfirmModal }: { positions: any[], onRefresh: () => void, setConfirmModal: any }) {
   const [newTitle, setNewTitle] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -2007,20 +2167,47 @@ function PositionManager({ positions, onRefresh }: { positions: any[], onRefresh
       setNewTitle('');
       onRefresh();
     } catch (err: any) {
-      alert("Error adding position: " + err.message);
+      setConfirmModal({
+        isOpen: true,
+        title: "Error",
+        message: "Error adding position: " + err.message,
+        icon: ShieldAlert,
+        confirmText: "Close",
+        color: "bg-slate-600",
+        hideCancel: true,
+        onConfirm: () => { }
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (id: string, title: string) => {
-    if (!window.confirm(`Delete position "${title}"? Members with this position will be reset to "Member".`)) return;
-    try {
-      await deleteMemberPosition(id);
-      onRefresh();
-    } catch (err: any) {
-      alert("Error deleting position: " + err.message);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Position",
+      message: `Delete position "${title}"? Members with this position will be reset to "Member".`,
+      icon: Trash2,
+      confirmText: "Delete",
+      color: "bg-rose-500",
+      onConfirm: async () => {
+        try {
+          await deleteMemberPosition(id);
+          onRefresh();
+        } catch (err: any) {
+          setConfirmModal({
+            isOpen: true,
+            title: "Error",
+            message: "Error deleting position: " + err.message,
+            icon: ShieldAlert,
+            confirmText: "Close",
+            color: "bg-slate-600",
+            hideCancel: true,
+            onConfirm: () => { }
+          });
+        }
+      }
+    });
   };
 
   return (
@@ -2066,7 +2253,7 @@ function PositionManager({ positions, onRefresh }: { positions: any[], onRefresh
 
 // --- Admin View ---
 
-function AdminView({ onLogout }: { onLogout: () => void }) {
+function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () => void, confirmModal: any, setConfirmModal: any }) {
   const [activeTab, setActiveTab] = useState('list');
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [waitlist, setWaitlist] = useState<any[]>([]);
@@ -2076,6 +2263,7 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
   const [positions, setPositions] = useState<any[]>([]);
   const [selectedMember, setSelectedMember] = useState<any>(null);
   const [maxSlots, setMaxSlots] = useState(60);
+  const [defaultProbationMonths, setDefaultProbationMonths] = useState(3);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [voicePartFilter, setVoicePartFilter] = useState('All');
@@ -2101,13 +2289,6 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
   const [selectedRepertoires, setSelectedRepertoires] = useState<string[]>([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
-  // Modal State
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  }>({ isOpen: false, title: '', message: '', onConfirm: () => { } });
 
   const fetchData = async () => {
     try {
@@ -2125,6 +2306,7 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
 
       if (configsRes.status === 'fulfilled') {
         if ((configsRes.value as any).max_slots) setMaxSlots(parseInt((configsRes.value as any).max_slots));
+        if ((configsRes.value as any).default_probation_months) setDefaultProbationMonths(parseInt((configsRes.value as any).default_probation_months));
       }
       if (regsRes.status === 'fulfilled') setRegistrations(regsRes.value as any);
       if (repsRes.status === 'fulfilled') setRepertoires(repsRes.value as any);
@@ -2170,7 +2352,16 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
       await fetchData(); // Immediate reload
     } catch (err: any) {
       console.error(err);
-      alert("Failed to approve song: " + (err.message || 'Unknown error'));
+      setConfirmModal({
+        isOpen: true,
+        title: "Approval Failed",
+        message: "Failed to approve song: " + (err.message || 'Unknown error'),
+        icon: ShieldAlert,
+        confirmText: "Close",
+        color: "bg-slate-600",
+        hideCancel: true,
+        onConfirm: () => { }
+      });
     } finally {
       setApprovingId(null);
     }
@@ -2183,7 +2374,16 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
       await fetchData(); // Immediate reload
     } catch (err: any) {
       console.error(err);
-      alert("Failed to reject song: " + (err.message || 'Unknown error'));
+      setConfirmModal({
+        isOpen: true,
+        title: "Rejection Failed",
+        message: "Failed to reject song: " + (err.message || 'Unknown error'),
+        icon: ShieldAlert,
+        confirmText: "Close",
+        color: "bg-slate-600",
+        hideCancel: true,
+        onConfirm: () => { }
+      });
     } finally {
       setRejectingId(null);
     }
@@ -2202,7 +2402,16 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         } catch (err: any) {
           console.error(err);
-          alert("Failed to delete song: " + (err.message || 'Unknown error'));
+          setConfirmModal({
+            isOpen: true,
+            title: "Deletion Failed",
+            message: "Failed to delete song: " + (err.message || 'Unknown error'),
+            icon: ShieldAlert,
+            confirmText: "Close",
+            color: "bg-slate-600",
+            hideCancel: true,
+            onConfirm: () => { }
+          });
         } finally {
           setDeletingRepId(null);
         }
@@ -2240,16 +2449,17 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
       isOpen: true,
       title: "Bulk Delete Songs",
       message: `Are you sure you want to completely delete ${selectedRepertoires.length} song options?`,
+      icon: Trash2,
+      confirmText: "Delete",
+      color: "bg-rose-500",
       onConfirm: async () => {
         setBulkActionLoading(true);
         try {
           await Promise.all(selectedRepertoires.map(id => deleteRepertoire(id)));
           await fetchData(); // Immediate reload
           setSelectedRepertoires([]);
-          setConfirmModal(prev => ({ ...prev, isOpen: false }));
         } catch (err: any) {
           console.error(err);
-          alert("Failed to delete songs: " + (err.message || 'Unknown error'));
         } finally {
           setBulkActionLoading(false);
         }
@@ -2258,21 +2468,29 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
   };
 
   const handleBulkApprove = async () => {
-    if (!window.confirm(`Are you sure you want to approve ${selectedRepertoires.length} song options? Other pending songs for these soloists will be deleted.`)) return;
-    setBulkActionLoading(true);
-    try {
-      await Promise.all(selectedRepertoires.map(id => {
-        const rep = repertoires.find(r => r.id === id);
-        return approveRepertoire(id, rep.registration_id); // Safe assuming 'rep' exists
-      }));
-      await fetchData(); // Immediate reload
-      setSelectedRepertoires([]);
-    } catch (err: any) {
-      console.error(err);
-      alert("Failed to approve songs: " + (err.message || 'Unknown error'));
-    } finally {
-      setBulkActionLoading(false);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Bulk Approve Songs",
+      message: `Are you sure you want to approve ${selectedRepertoires.length} song options? Other pending songs for these soloists will be deleted.`,
+      icon: Check,
+      confirmText: "Approve",
+      color: "bg-indigo-600",
+      onConfirm: async () => {
+        setBulkActionLoading(true);
+        try {
+          await Promise.all(selectedRepertoires.map(id => {
+            const rep = repertoires.find(r => r.id === id);
+            return approveRepertoire(id, rep.registration_id); // Safe assuming 'rep' exists
+          }));
+          await fetchData(); // Immediate reload
+          setSelectedRepertoires([]);
+        } catch (err: any) {
+          console.error(err);
+        } finally {
+          setBulkActionLoading(false);
+        }
+      }
+    });
   };
 
   const handleResetAllSongs = async () => {
@@ -2289,7 +2507,16 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         } catch (err: any) {
           console.error(err);
-          alert("Failed to reset songs: " + (err.message || 'Unknown error'));
+          setConfirmModal({
+            isOpen: true,
+            title: "Reset Failed",
+            message: "Failed to reset songs: " + (err.message || 'Unknown error'),
+            icon: ShieldAlert,
+            confirmText: "Close",
+            color: "bg-slate-600",
+            hideCancel: true,
+            onConfirm: () => { }
+          });
         } finally {
           setBulkActionLoading(false);
         }
@@ -2325,27 +2552,38 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
       return acc;
     }, {} as Record<string, any>)
   ).sort((a: any, b: any) => a.registrations?.slot_id - b.registrations?.slot_id);
-
   const filteredMembers = (members || []).filter(m => {
+    const matchesArchived = !m.is_archived;
     const matchesSearch = (m.full_name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
       (m.email?.toLowerCase() || '').includes(searchQuery.toLowerCase());
     const matchesVoice = memberVoiceFilter === 'All' || m.voice_part === memberVoiceFilter;
-    return matchesSearch && matchesVoice;
+    return matchesArchived && matchesSearch && matchesVoice;
+  }).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+
+  const filteredArchivedMembers = (members || []).filter(m => {
+    const matchesArchived = m.is_archived;
+    const matchesSearch = (m.full_name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (m.email?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+    const matchesVoice = memberVoiceFilter === 'All' || m.voice_part === memberVoiceFilter;
+    return matchesArchived && matchesSearch && matchesVoice;
   }).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
 
   const totalPages = Math.ceil(
-    activeTab === 'members' ? (filteredMembers || []).length / itemsPerPage :
-      activeTab === 'list' ? (filtered || []).length / itemsPerPage :
-        (groupedSubmittedRepertoires || []).length / itemsPerPage
+    activeTab === 'archives' ? (filteredArchivedMembers || []).length / itemsPerPage :
+      activeTab === 'members' ? (filteredMembers || []).length / itemsPerPage :
+        activeTab === 'list' ? (filtered || []).length / itemsPerPage :
+          (groupedSubmittedRepertoires || []).length / itemsPerPage
   );
 
   const paginated = (
-    activeTab === 'members' ? (filteredMembers || []) :
-      activeTab === 'list' ? (filtered || []) :
-        (groupedSubmittedRepertoires || [])
+    activeTab === 'archives' ? (filteredArchivedMembers || []) :
+      activeTab === 'members' ? (filteredMembers || []) :
+        activeTab === 'list' ? (filtered || []) :
+          (groupedSubmittedRepertoires || [])
   ).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const statsSource = activeTab === 'members' ? members : registrations;
+  const statsSource = activeTab === 'archives' ? members.filter(m => m.is_archived) :
+    activeTab === 'members' ? members.filter(m => !m.is_archived) : registrations;
   const stats = {
     total: (statsSource || []).length,
     soprano: (statsSource || []).filter(r => r.voice_part === 'Soprano').length,
@@ -2369,24 +2607,41 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
       setEditingId(null);
     } catch (err: any) {
       console.error(err);
-      alert("Failed to save edits: " + (err.message || 'Unknown error. Check RLS policies.'));
+      setConfirmModal({
+        isOpen: true,
+        title: "Save Failed",
+        message: "Failed to save edits: " + (err.message || 'Unknown error. Check RLS policies.'),
+        icon: ShieldAlert,
+        confirmText: "Close",
+        color: "bg-slate-600",
+        hideCancel: true,
+        onConfirm: () => { }
+      });
     } finally {
       setSavingId(null);
     }
   };
 
   const handleDeleteClick = async (id: string) => {
-    if (!window.confirm("Are you sure you want to completely remove this registration and free up the slot?")) return;
-    setDeletingId(id);
-    try {
-      await deleteRegistration(id);
-      await fetchData(); // Immediate reload
-    } catch (err: any) {
-      console.error(err);
-      alert("Failed to delete registration: " + (err.message || 'Unknown error. Check RLS policies.'));
-    } finally {
-      setDeletingId(null);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Registration",
+      message: "Are you sure you want to completely remove this registration and free up the slot?",
+      icon: Trash2,
+      confirmText: "Delete",
+      color: "bg-rose-500",
+      onConfirm: async () => {
+        setDeletingId(id);
+        try {
+          await deleteRegistration(id);
+          await fetchData();
+        } catch (err: any) {
+          console.error(err);
+        } finally {
+          setDeletingId(null);
+        }
+      }
+    });
   };
 
   const handlePromoteWaitlist = async (entry: any) => {
@@ -2401,37 +2656,58 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
     }
 
     if (nextSlot === -1) {
-      alert("No available slots to promote to. Please delete a registration first or increase max slots.");
+      setConfirmModal({
+        isOpen: true,
+        title: "No Available Slots",
+        message: "No available slots to promote to. Please delete a registration first or increase max slots.",
+        icon: ShieldAlert,
+        confirmText: "Close",
+        color: "bg-slate-600",
+        hideCancel: true,
+        onConfirm: () => { }
+      });
       return;
     }
 
-    if (!window.confirm(`Promote ${entry.full_name} to slot S-${nextSlot}?`)) return;
-
-    try {
-      setBulkActionLoading(true);
-      // 1. Register as soloist
-      await registerSoloist(entry.full_name, entry.voice_part, nextSlot, entry.phone);
-      // 2. Delete from waitlist
-      await deleteWaitlistEntry(entry.id);
-      await fetchData();
-      alert(`${entry.full_name} promoted to S-${nextSlot}`);
-    } catch (err: any) {
-      console.error(err);
-      alert("Promotion failed: " + (err.message || "Unknown error"));
-    } finally {
-      setBulkActionLoading(false);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Promote Waitlist",
+      message: `Promote ${entry.full_name} to slot S-${nextSlot}?`,
+      icon: Check,
+      confirmText: "Promote",
+      color: "bg-indigo-600",
+      onConfirm: async () => {
+        try {
+          setBulkActionLoading(true);
+          await registerSoloist(entry.full_name, entry.voice_part, nextSlot, entry.phone);
+          await deleteWaitlistEntry(entry.id);
+          await fetchData();
+        } catch (err: any) {
+          console.error(err);
+        } finally {
+          setBulkActionLoading(false);
+        }
+      }
+    });
   };
 
   const handleRemoveWaitlist = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to remove ${name} from the waitlist?`)) return;
-    try {
-      await deleteWaitlistEntry(id);
-      await fetchData();
-    } catch (err: any) {
-      console.error(err);
-      alert("Removal failed");
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Remove from Waitlist",
+      message: `Are you sure you want to remove ${name} from the waitlist?`,
+      icon: Trash2,
+      confirmText: "Remove",
+      color: "bg-rose-500",
+      onConfirm: async () => {
+        try {
+          await deleteWaitlistEntry(id);
+          await fetchData();
+        } catch (err: any) {
+          console.error(err);
+        }
+      }
+    });
   };
 
   const handleSaveMember = async (form: any) => {
@@ -2454,27 +2730,72 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
       setEditingMember(null);
     } catch (err: any) {
       console.error(err);
-      alert("Failed to save member: " + (err.message || "Unknown error"));
+      setConfirmModal({
+        isOpen: true,
+        title: "Save Failed",
+        message: "Failed to save member: " + (err.message || "Unknown error"),
+        icon: ShieldAlert,
+        confirmText: "Close",
+        color: "bg-slate-600",
+        hideCancel: true,
+        onConfirm: () => { }
+      });
     } finally {
       setIsSavingMember(false);
     }
   };
 
-  const handleImportMembers = async () => {
-    if (!window.confirm("Import all registered soloists into the member directory? Duplicates will be skipped.")) return;
-    setBulkActionLoading(true);
-    try {
-      const result = await importRegistrationsToMembers();
-      if (result) {
-        await fetchData();
-        alert(`Import complete! ${result.imported} new members added, ${result.total - result.imported} already existed.`);
+  const handleRestoreMember = async (id: string, name: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Restore Member",
+      message: `Restore ${name} to active member list?`,
+      icon: History,
+      confirmText: "Restore",
+      color: "bg-indigo-600",
+      onConfirm: async () => {
+        try {
+          await updateMember(id, { is_archived: false });
+          await fetchData();
+        } catch (err: any) {
+          console.error(err);
+        }
       }
-    } catch (err: any) {
-      console.error(err);
-      alert("Import failed: " + (err.message || "Unknown error"));
-    } finally {
-      setBulkActionLoading(false);
-    }
+    });
+  };
+
+  const handleImportMembers = async () => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Import Members",
+      message: "Import all registered soloists into the member directory? Duplicates will be skipped.",
+      icon: Download,
+      confirmText: "Import",
+      color: "bg-indigo-600",
+      onConfirm: async () => {
+        setBulkActionLoading(true);
+        try {
+          const result = await importRegistrationsToMembers();
+          if (result) {
+            await fetchData();
+            setConfirmModal({
+              isOpen: true,
+              title: "Import Complete",
+              message: `${result.imported} new members added, ${result.total - result.imported} already existed.`,
+              icon: Check,
+              confirmText: "Success",
+              color: "bg-emerald-500",
+              hideCancel: true,
+              onConfirm: () => { }
+            });
+          }
+        } catch (err: any) {
+          console.error(err);
+        } finally {
+          setBulkActionLoading(false);
+        }
+      }
+    });
   };
 
   const handleDownloadCSV = () => {
@@ -2526,7 +2847,7 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
             className="space-y-8"
           >
             {/* Contextual Header Section */}
-            {(activeTab === 'list' || activeTab === 'members' || activeTab === 'repertoire') && (
+            {(activeTab === 'list' || activeTab === 'members' || activeTab === 'repertoire' || activeTab === 'archives') && (
               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-white dark:bg-[#131521]/40 p-6 rounded-[2rem] border border-slate-200 dark:border-white/5 backdrop-blur-sm shadow-xl shadow-black/5">
                 <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
                   {activeTab === 'members' && (
@@ -2670,6 +2991,9 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
                                 </button>
                                 <p className="text-[9px] font-black text-indigo-500/60 uppercase tracking-widest mt-0.5">
                                   {m.member_positions?.title || 'Member'}
+                                  {m.is_on_probation && (
+                                    <span className="ml-2 px-1.5 py-0.5 bg-amber-500/10 text-amber-500 text-[8px] font-black uppercase tracking-widest border border-amber-500/20 rounded-md">Probation</span>
+                                  )}
                                 </p>
                               </div>
                             </div>
@@ -2712,11 +3036,20 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
                               </button>
                               <button
                                 onClick={async () => {
-                                  if (!window.confirm("Delete this member profile?")) return;
-                                  try {
-                                    await deleteMember(m.id);
-                                    await fetchData();
-                                  } catch (err) { console.error(err); }
+                                  setConfirmModal({
+                                    isOpen: true,
+                                    title: "Delete Member",
+                                    message: `Are you sure you want to completely delete ${m.full_name}'s profile?`,
+                                    icon: Trash2,
+                                    confirmText: "Delete",
+                                    color: "bg-rose-500",
+                                    onConfirm: async () => {
+                                      try {
+                                        await deleteMember(m.id);
+                                        await fetchData();
+                                      } catch (err) { console.error(err); }
+                                    }
+                                  });
                                 }}
                                 className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-all"
                               >
@@ -2729,6 +3062,86 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            ) : activeTab === 'archives' ? (
+              <div className="space-y-6">
+                <div className="overflow-x-auto rounded-3xl border border-slate-200 dark:border-white/5">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 dark:bg-[#0b0d17] text-[10px] font-black uppercase text-slate-500 tracking-widest border-b border-slate-200 dark:border-white/5">
+                      <tr>
+                        <th className="px-8 py-5">Member</th>
+                        <th className="px-8 py-5">Voice</th>
+                        <th className="px-8 py-5">Contact</th>
+                        <th className="px-8 py-5 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {paginated.map((m: any) => (
+                        <tr key={m.id} className="hover:bg-white/[0.01] transition-colors">
+                          <td className="px-8 py-5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10">
+                                <img src={m.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(m.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`} alt="" className="w-full h-full object-cover" />
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-slate-900 dark:text-white leading-tight">{m.full_name}</h4>
+                                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-0.5 italic">Archived</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-8 py-5">
+                            <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">{m.voice_part}</span>
+                          </td>
+                          <td className="px-8 py-5">
+                            <div className="space-y-0.5">
+                              {m.phone && <div className="text-[10px] text-slate-500 font-bold">{m.phone}</div>}
+                              {m.email && <div className="text-[10px] text-slate-400">{m.email}</div>}
+                            </div>
+                          </td>
+                          <td className="px-8 py-5">
+                            <div className="flex justify-center gap-2">
+                              <button
+                                onClick={() => handleRestoreMember(m.id, m.full_name)}
+                                className="px-4 py-2 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
+                              >
+                                Restore
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  setConfirmModal({
+                                    isOpen: true,
+                                    title: "Delete Permanently",
+                                    message: `Are you sure you want to permanently delete ${m.full_name}? This action cannot be undone.`,
+                                    icon: Trash2,
+                                    confirmText: "Delete",
+                                    color: "bg-rose-600",
+                                    onConfirm: async () => {
+                                      try {
+                                        await deleteMember(m.id);
+                                        await fetchData();
+                                      } catch (err) { console.error(err); }
+                                    }
+                                  });
+                                }}
+                                className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-all"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {paginated.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-8 py-20 text-center text-slate-500 font-bold uppercase tracking-widest text-xs">
+                            No archived members
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Pagination same as members */}
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50 rounded-b-[2.5rem]">
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
@@ -2952,7 +3365,16 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
 
                             <button
                               onClick={() => {
-                                alert("Check-in Successful!");
+                                setConfirmModal({
+                                  isOpen: true,
+                                  title: "Check-in Successful",
+                                  message: `${r.full_name} has been verified and checked in successfully.`,
+                                  icon: Check,
+                                  confirmText: "Done",
+                                  color: "bg-emerald-500",
+                                  hideCancel: true,
+                                  onConfirm: () => { }
+                                });
                                 setSearchQuery('');
                               }}
                               className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-black py-6 rounded-[2rem] text-xl transition-all shadow-xl shadow-emerald-500/30 uppercase italic"
@@ -3081,7 +3503,16 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
                     await fetchData();
                   } catch (err: any) {
                     console.error(err);
-                    alert("Database Error: " + (err.message || "Failed to update status. Please ensure the 'performance_status' column exists in your registrations table."));
+                    setConfirmModal({
+                      isOpen: true,
+                      title: "Update Failed",
+                      message: "Database Error: " + (err.message || "Failed to update status. Please ensure the 'performance_status' column exists in your registrations table."),
+                      icon: ShieldAlert,
+                      confirmText: "Close",
+                      color: "bg-slate-600",
+                      hideCancel: true,
+                      onConfirm: () => { }
+                    });
                   }
                 }}
                 onResetStatus={async () => {
@@ -3090,7 +3521,16 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
                     await fetchData();
                   } catch (err: any) {
                     console.error(err);
-                    alert("Failed to reset: " + (err.message || "Unknown error"));
+                    setConfirmModal({
+                      isOpen: true,
+                      title: "Reset Failed",
+                      message: "Failed to reset: " + (err.message || "Unknown error"),
+                      icon: ShieldAlert,
+                      confirmText: "Close",
+                      color: "bg-slate-600",
+                      hideCancel: true,
+                      onConfirm: () => { }
+                    });
                   }
                 }}
               />
@@ -3309,29 +3749,35 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
                   </div>
                 </div>
 
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <History size={18} className="text-amber-400" />
+                    <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">Probation Period</h4>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed px-1">Set the default number of months for new member probation.</p>
+                  <div className="flex gap-4">
+                    <input
+                      type="number"
+                      value={defaultProbationMonths}
+                      onChange={e => setDefaultProbationMonths(parseInt(e.target.value))}
+                      className="flex-1 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all font-bold"
+                    />
+                    <button onClick={() => updateConfig('default_probation_months', defaultProbationMonths.toString())} className="px-8 bg-amber-500 text-slate-900 font-black rounded-2xl hover:bg-amber-400 transition-all uppercase tracking-tighter italic">Update</button>
+                  </div>
+                </div>
+
                 <div className="p-8 bg-indigo-500/5 rounded-[2.5rem] border border-indigo-500/10 mt-8">
-                  <PositionManager positions={positions} onRefresh={fetchData} />
+                  <PositionManager positions={positions} onRefresh={fetchData} setConfirmModal={setConfirmModal} />
                 </div>
               </div>
             )}
           </motion.div>
         </AnimatePresence>
-      </div>
-
-      <AnimatePresence>
-        <ConfirmModal
-          isOpen={confirmModal.isOpen}
-          onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-          onConfirm={confirmModal.onConfirm}
-          title={confirmModal.title}
-          message={confirmModal.message}
-          loading={bulkActionLoading || deletingRepId !== null}
-        />
-
         <MemberProfileModal
           member={selectedMember}
           isOpen={!!selectedMember}
           onClose={() => setSelectedMember(null)}
+          setConfirmModal={setConfirmModal}
         />
 
         <MemberEntryModal
@@ -3345,8 +3791,9 @@ function AdminView({ onLogout }: { onLogout: () => void }) {
           registrations={registrations}
           positions={positions}
           loading={isSavingMember}
+          setConfirmModal={setConfirmModal}
         />
-      </AnimatePresence>
+      </div>
     </Layout >
   );
 }
@@ -3439,7 +3886,7 @@ function RosterView() {
 
 // --- Song Entry View ---
 
-function SongEntryView() {
+function SongEntryView({ setConfirmModal }: { setConfirmModal: any }) {
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [repertoires, setRepertoires] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3498,7 +3945,16 @@ function SongEntryView() {
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
       console.error(err);
-      alert("Failed to save songs: " + (err.message || 'Unknown error'));
+      setConfirmModal({
+        isOpen: true,
+        title: "Submission Failed",
+        message: "Failed to save songs: " + (err.message || 'Unknown error'),
+        icon: ShieldAlert,
+        confirmText: "Close",
+        color: "bg-slate-600",
+        hideCancel: true,
+        onConfirm: () => { }
+      });
     } finally {
       setSubmitting(false);
     }
@@ -3874,20 +4330,46 @@ export default function App() {
     return <PublicView />;
   }
 
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    icon?: any;
+    confirmText?: string;
+    color?: string;
+    hideCancel?: boolean;
+    loading?: boolean;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => { } });
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/register" element={<PublicView />} />
+        <Route path="/register" element={<PublicView setConfirmModal={setConfirmModal} />} />
         <Route path="/status" element={<SoloistStatusView />} />
         <Route path="/members" element={<MembersView />} />
         <Route
           path="/admin"
-          element={isAuthenticated ? <AdminView onLogout={handleLogout} /> : <Navigate to="/login" replace />}
+          element={isAuthenticated ? <AdminView onLogout={handleLogout} confirmModal={confirmModal} setConfirmModal={setConfirmModal} /> : <Navigate to="/login" replace />}
         />
         <Route path="/login" element={<LoginView onLogin={handleLogin} />} />
         <Route path="/" element={<RosterView />} />
-        <Route path="/repertoire" element={<SongEntryView />} />
+        <Route path="/repertoire" element={<SongEntryView setConfirmModal={setConfirmModal} />} />
       </Routes>
+      <AnimatePresence>
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          onConfirm={confirmModal.onConfirm}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          loading={confirmModal.loading}
+          icon={confirmModal.icon}
+          confirmText={confirmModal.confirmText}
+          color={confirmModal.color}
+          hideCancel={confirmModal.hideCancel}
+        />
+      </AnimatePresence>
     </BrowserRouter>
   );
 }

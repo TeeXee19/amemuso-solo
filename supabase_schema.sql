@@ -145,12 +145,23 @@ CREATE TABLE IF NOT EXISTS members (
   email TEXT,
   registration_id UUID REFERENCES registrations(id) ON DELETE SET NULL,
   is_soloist BOOLEAN DEFAULT false,
+  is_on_probation BOOLEAN DEFAULT false,
+  probation_until DATE,
+  is_archived BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Add missing columns if table already exists from previous phases
 ALTER TABLE members ADD COLUMN IF NOT EXISTS joined_at DATE DEFAULT CURRENT_DATE;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS position_id UUID REFERENCES member_positions(id) ON DELETE SET NULL;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS is_on_probation BOOLEAN DEFAULT false;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS probation_until DATE;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT false;
+
+-- 13. Config Updates
+INSERT INTO config (key, value)
+VALUES ('default_probation_months', '3')
+ON CONFLICT (key) DO NOTHING;
 
 ALTER TABLE members ENABLE ROW LEVEL SECURITY;
 
