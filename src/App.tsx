@@ -5292,13 +5292,13 @@ function PortalDashboard({ member, stats }: any) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 lg:flex gap-4">
-            <div className="bg-white/10 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 min-w-[140px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-4 w-full lg:w-auto">
+            <div className="bg-white/10 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 min-w-full lg:min-w-[140px]">
               <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-1">Attendance</p>
               <h4 className="text-3xl font-black">{stats?.percentage || 0}%</h4>
               <p className="text-[9px] text-white/40 font-bold uppercase mt-1">{stats?.attended} of {stats?.total} events</p>
             </div>
-            <div className="bg-white/10 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 min-w-[140px]">
+            <div className="bg-white/10 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 min-w-full lg:min-w-[140px]">
               <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-1">Solo Credits</p>
               <h4 className="text-3xl font-black">{member.is_soloist ? 'Active' : 'M-Member'}</h4>
               <p className="text-[9px] text-white/40 font-bold uppercase mt-1">Status Summary</p>
