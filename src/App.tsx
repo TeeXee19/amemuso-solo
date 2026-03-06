@@ -15,7 +15,7 @@ import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
   Users, Trash2, Loader2, X, Check, Music, Sun, Monitor, Moon, Edit2, Plus, Camera,
   Calendar, Briefcase, History, Archive, Youtube, Instagram, Facebook, Twitter, Video, CalendarCheck,
-  LogOut, CheckSquare, Lock, Trophy, User, ShieldCheck, ShieldAlert, Share2, Mail, Phone as PhoneIcon, Save
+  LogOut, CheckSquare, Lock, Trophy, User, ShieldCheck, ShieldAlert, Share2, Mail, Phone as PhoneIcon, Save, MapPin
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -2548,8 +2548,13 @@ function AttendanceManagement({ events, fetchData, setConfirmModal }: any) {
     duration_minutes: 120,
     check_in_code: Math.floor(1000 + Math.random() * 9000).toString(),
     is_active: true,
-    counts_toward_stats: true
+    counts_toward_stats: true,
+    lat: null as number | null,
+    lng: null as number | null,
+    radius_meters: 150
   });
+
+  const [locating, setLocating] = useState(false);
 
   const handleCreateEvent = async () => {
     if (!form.title || !form.start_time) return;
@@ -2566,7 +2571,10 @@ function AttendanceManagement({ events, fetchData, setConfirmModal }: any) {
         duration_minutes: 120,
         check_in_code: Math.floor(1000 + Math.random() * 9000).toString(),
         is_active: true,
-        counts_toward_stats: true
+        counts_toward_stats: true,
+        lat: null,
+        lng: null,
+        radius_meters: 150
       });
     } catch (err) {
       console.error(err);
@@ -2872,13 +2880,53 @@ function AttendanceManagement({ events, fetchData, setConfirmModal }: any) {
 
                 <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5">
                   <div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">Require Location Verification</p>
+                    <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                      {form.lat && form.lng ? `Restricted to current location (${form.radius_meters}m radius)` : 'Optional: Prevent remote check-ins'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (form.lat && form.lng) {
+                        setForm({ ...form, lat: null, lng: null });
+                      } else {
+                        setLocating(true);
+                        navigator.geolocation.getCurrentPosition(
+                          (pos) => {
+                            setForm({ ...form, lat: pos.coords.latitude, lng: pos.coords.longitude });
+                            setLocating(false);
+                          },
+                          (err) => {
+                            console.warn("Location error:", err);
+                            setLocating(false);
+                            alert("Location access denied or unavailable.");
+                          },
+                          { enableHighAccuracy: true, timeout: 10000 }
+                        );
+                      }
+                    }}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
+                      form.lat && form.lng
+                        ? "bg-emerald-500/10 text-emerald-500"
+                        : "bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20"
+                    )}
+                  >
+                    {locating ? <Loader2 size={14} className="animate-spin" /> : <MapPin size={14} />}
+                    {form.lat && form.lng ? 'Location Set' : 'Set Location'}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5">
+                  <div>
                     <p className="text-xs font-bold text-slate-900 dark:text-white">Count toward attendance %</p>
                     <p className="text-[10px] text-slate-500 font-medium mt-0.5">Toggle off for optional events</p>
                   </div>
                   <button
                     onClick={() => setForm({ ...form, counts_toward_stats: !form.counts_toward_stats })}
                     className={cn(
-                      "w-12 h-6 rounded-full transition-colors relative",
+                      "w-12 h-6 rounded-full transition-colors relative flex-shrink-0",
                       form.counts_toward_stats ? "bg-indigo-500" : "bg-slate-300 dark:bg-slate-600"
                     )}
                   >
@@ -5178,16 +5226,35 @@ function PortalDashboard({ member, stats }: any) {
 
     setLoading(true);
     setMessage(null);
-    try {
-      await validateAndCheckIn(member.id, code);
-      setMessage({ text: 'Check-in successful! Attendance recorded.', type: 'success' });
-      setCode('');
-      // Force refresh stats if needed, or rely on parent re-render if we had a way to trigger it.
-      // Usually, successful check-in would want to refresh the stats object.
-    } catch (err: any) {
-      setMessage({ text: err.message || 'Check-in failed.', type: 'error' });
-    } finally {
-      setLoading(false);
+
+    const performCheckIn = async (lat?: number, lng?: number) => {
+      try {
+        await validateAndCheckIn(member.id, code, lat, lng);
+        setMessage({ text: 'Check-in successful! Attendance recorded.', type: 'success' });
+        setCode('');
+      } catch (err: any) {
+        setMessage({ text: err.message || 'Check-in failed.', type: 'error' });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => performCheckIn(position.coords.latitude, position.coords.longitude),
+        (error) => {
+          console.warn('Geolocation failed:', error);
+          if (error.code === error.PERMISSION_DENIED) {
+            setMessage({ text: 'Location access denied. Please allow location access in your browser to check in.', type: 'error' });
+            setLoading(false);
+          } else {
+            performCheckIn();
+          }
+        },
+        { timeout: 10000, enableHighAccuracy: true }
+      );
+    } else {
+      performCheckIn();
     }
   };
 

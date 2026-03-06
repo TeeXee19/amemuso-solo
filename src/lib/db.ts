@@ -584,7 +584,7 @@ export const autoExpireEvents = async () => {
         .in('id', expiredIds);
 };
 
-export const validateAndCheckIn = async (memberId: string, code: string) => {
+export const validateAndCheckIn = async (memberId: string, code: string, memberLat?: number, memberLng?: number) => {
     // 1. Find ALL events (active and recently expired) to match by code
     const { data: allEvents, error: eventErr } = await supabase
         .from('attendance_events')
@@ -613,7 +613,24 @@ export const validateAndCheckIn = async (memberId: string, code: string) => {
         throw new Error('This event has not started yet.');
     }
 
-    // 4. Check if already checked in
+    // 4. Validate Location if Event requires it
+    if (matchingEvent.lat != null && matchingEvent.lng != null) {
+        if (memberLat == null || memberLng == null) {
+            throw new Error('This event requires location access. Please allow location access to check in.');
+        }
+
+        const distanceMeters = calculateDistanceMeters(
+            memberLat, memberLng,
+            matchingEvent.lat, matchingEvent.lng
+        );
+        const maxRadius = matchingEvent.radius_meters || 150; // Default 150 meters
+
+        if (distanceMeters > maxRadius) {
+            throw new Error(`You must be within ${maxRadius}m of the venue to check in. You are ${Math.round(distanceMeters)}m away.`);
+        }
+    }
+
+    // 5. Check if already checked in
     const { data: existing, error: _checkErr } = await supabase
         .from('attendance_records')
         .select('id')
@@ -625,9 +642,26 @@ export const validateAndCheckIn = async (memberId: string, code: string) => {
         throw new Error('You have already checked in for this event.');
     }
 
-    // 5. Mark attendance
+    // 6. Mark attendance
     return markAttendance(matchingEvent.id, memberId, {
         source: 'member_portal',
         timestamp: new Date().toISOString()
     });
 };
+
+// Haversine formula to find distance between two lat/lng coordinates in meters
+function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371e3; // Earth radius in meters
+    const rad = Math.PI / 180;
+    const phi1 = lat1 * rad;
+    const phi2 = lat2 * rad;
+    const deltaPhi = (lat2 - lat1) * rad;
+    const deltaLambda = (lon2 - lon1) * rad;
+
+    const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+        Math.cos(phi1) * Math.cos(phi2) *
+        Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
