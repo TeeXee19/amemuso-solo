@@ -1449,7 +1449,7 @@ function LoginView({ onLogin }: { onLogin: () => void }) {
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="Enter Email Address"
-              className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-bold"
+              className="w-full text-black dark:text-white bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-bold"
             />
           </div>
 
@@ -1461,7 +1461,7 @@ function LoginView({ onLogin }: { onLogin: () => void }) {
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-bold"
+              className="w-full text-black dark:text-white bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-600 font-bold"
             />
           </div>
 
@@ -5033,6 +5033,7 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [memberStats, setMemberStats] = useState<any>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (member) {
@@ -5062,8 +5063,19 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0b0d17] text-slate-900 dark:text-white">
+      {/* Mobile Overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar for Portal */}
-      <div className="fixed left-0 top-0 bottom-0 w-72 bg-white dark:bg-[#131521] border-r border-slate-200 dark:border-white/5 z-50 hidden lg:block">
+      <div className={cn(
+        "fixed left-0 top-0 bottom-0 w-72 bg-white dark:bg-[#131521] border-r border-slate-200 dark:border-white/5 z-50 transition-transform duration-300",
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      )}>
         <div className="p-8 pb-4">
           <div className="flex items-center gap-3 mb-12">
             <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-500/20">
@@ -5083,7 +5095,10 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
             ].map(item => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setIsMobileMenuOpen(false);
+                }}
                 className={cn(
                   "w-full flex items-center gap-4 px-6 py-4 rounded-[1.5rem] transition-all group relative",
                   activeTab === item.id
@@ -5113,23 +5128,29 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
       </div>
 
       <div className="lg:pl-72 min-h-screen">
-        <header className="h-24 bg-white/80 dark:bg-[#131521]/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 dark:border-white/5 px-8 flex items-center justify-between">
+        <header className="h-24 bg-white/80 dark:bg-[#131521]/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 dark:border-white/5 px-4 lg:px-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-white/10">
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="p-2 -ml-2 text-slate-500 hover:text-indigo-600 lg:hidden"
+            >
+              <Menu size={24} />
+            </button>
+            <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-white/10 hidden sm:block">
               <img src={member.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(member.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`} alt="" className="w-full h-full object-cover" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900 dark:text-white leading-tight">{member.full_name}</h2>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{member.voice_part} • {member.portal_id}</p>
+              <h2 className="text-sm lg:text-lg font-black text-slate-900 dark:text-white leading-tight">{member.full_name}</h2>
+              <p className="text-[9px] lg:text-[10px] text-slate-500 font-bold uppercase tracking-widest">{member.voice_part} • {member.portal_id}</p>
             </div>
           </div>
 
-          <Link to="/" className="px-6 py-3 bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 font-black text-[10px] uppercase tracking-widest rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all active:scale-95">
+          <Link to="/" className="px-4 py-2 lg:px-6 lg:py-3 bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 font-black text-[9px] lg:text-[10px] uppercase tracking-widest rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all active:scale-95">
             Public View
           </Link>
         </header>
 
-        <main className="p-8 lg:p-12">
+        <main className="p-4 lg:p-12">
           {activeTab === 'dashboard' && <PortalDashboard member={member} stats={memberStats} />}
           {activeTab === 'history' && <PortalHistory memberId={member.id} />}
           {activeTab === 'profile' && <PortalProfileEditor member={member} onUpdate={onLogin} setConfirmModal={setConfirmModal} />}
@@ -5168,7 +5189,7 @@ function PortalLogin({ onLogin, loading, error }: any) {
                   <input
                     value={portalId}
                     onChange={e => setPortalId(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm focus:border-indigo-500 outline-none uppercase font-bold tracking-widest"
+                    className="w-full text-black dark:text-white bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm focus:border-indigo-500 outline-none uppercase font-bold tracking-widest"
                     placeholder="E.G. M-01"
                   />
                 </div>
@@ -5182,7 +5203,7 @@ function PortalLogin({ onLogin, loading, error }: any) {
                     value={pin}
                     maxLength={4}
                     onChange={e => setPin(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm focus:border-indigo-500 outline-none tracking-widest"
+                    className="w-full text-black dark:text-white bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm focus:border-indigo-500 outline-none tracking-widest"
                     placeholder="••••"
                   />
                 </div>
