@@ -533,47 +533,87 @@ export const markAttendance = async (eventId: string, memberId: string, metadata
 };
 
 export const getMemberAttendanceStats = async (memberId: string) => {
-    const { data: events, error: errEvents } = await supabase
+    // Total = all events that count toward stats (regardless of is_active)
+    const { data: countedEvents, error: errEvents } = await supabase
         .from('attendance_events')
         .select('id')
-        .eq('is_active', true);
+        .eq('counts_toward_stats', true);
 
     if (errEvents) throw errEvents;
 
+    const countedEventIds = (countedEvents || []).map((e: any) => e.id);
+    const total = countedEventIds.length;
+
+    // Attended = records for this member in events that count toward stats
     const { data: records, error: errRecords } = await supabase
         .from('attendance_records')
         .select('event_id')
-        .eq('member_id', memberId);
+        .eq('member_id', memberId)
+        .in('event_id', total > 0 ? countedEventIds : ['00000000-0000-0000-0000-000000000000']);
 
     if (errRecords) throw errRecords;
 
-    const total = events?.length || 0;
     const attended = records?.length || 0;
     const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
 
     return { attended, total, percentage };
 };
 
-export const validateAndCheckIn = async (memberId: string, code: string) => {
-    // 1. Find active events
-    const { data: activeEvents, error: eventErr } = await supabase
+export const autoExpireEvents = async () => {
+    const now = new Date();
+    const { data: activeEvents, error } = await supabase
         .from('attendance_events')
-        .select('*')
+        .select('id, date, start_time, duration_minutes')
         .eq('is_active', true);
 
-    if (eventErr) throw eventErr;
-    if (!activeEvents || activeEvents.length === 0) {
-        throw new Error('No active attendance events found.');
-    }
+    if (error || !activeEvents) return;
 
-    // 2. Find matching event by code (case insensitive or exact depending on preference, usually exact for codes)
-    const matchingEvent = activeEvents.find((e: any) => e.check_in_code.toUpperCase() === code.toUpperCase());
+    const expiredIds = activeEvents
+        .filter((e: any) => {
+            const start = new Date(`${e.date}T${e.start_time}`);
+            const end = new Date(start.getTime() + (e.duration_minutes || 60) * 60 * 1000);
+            return now > end;
+        })
+        .map((e: any) => e.id);
+
+    if (expiredIds.length === 0) return;
+
+    await supabase
+        .from('attendance_events')
+        .update({ is_active: false })
+        .in('id', expiredIds);
+};
+
+export const validateAndCheckIn = async (memberId: string, code: string) => {
+    // 1. Find ALL events (active and recently expired) to match by code
+    const { data: allEvents, error: eventErr } = await supabase
+        .from('attendance_events')
+        .select('*');
+
+    if (eventErr) throw eventErr;
+
+    // 2. Find matching event by code
+    const matchingEvent = (allEvents || []).find(
+        (e: any) => e.check_in_code.toUpperCase() === code.toUpperCase()
+    );
 
     if (!matchingEvent) {
         throw new Error('Invalid check-in code.');
     }
 
-    // 3. Check if already checked in
+    // 3. Check if the event's time window is still open
+    const now = new Date();
+    const start = new Date(`${matchingEvent.date}T${matchingEvent.start_time}`);
+    const end = new Date(start.getTime() + (matchingEvent.duration_minutes || 60) * 60 * 1000);
+
+    if (now > end) {
+        throw new Error('This event has ended. Check-in is no longer available.');
+    }
+    if (now < start) {
+        throw new Error('This event has not started yet.');
+    }
+
+    // 4. Check if already checked in
     const { data: existing, error: _checkErr } = await supabase
         .from('attendance_records')
         .select('id')
@@ -585,6 +625,9 @@ export const validateAndCheckIn = async (memberId: string, code: string) => {
         throw new Error('You have already checked in for this event.');
     }
 
-    // 4. Mark attendance
-    return markAttendance(matchingEvent.id, memberId, { source: 'member_portal', timestamp: new Date().toISOString() });
+    // 5. Mark attendance
+    return markAttendance(matchingEvent.id, memberId, {
+        source: 'member_portal',
+        timestamp: new Date().toISOString()
+    });
 };

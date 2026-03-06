@@ -207,6 +207,7 @@ CREATE TABLE IF NOT EXISTS attendance_events (
   lng DECIMAL,
   radius_meters INTEGER DEFAULT 100,
   is_active BOOLEAN DEFAULT true,
+  counts_toward_stats BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

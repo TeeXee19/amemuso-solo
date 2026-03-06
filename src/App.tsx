@@ -9,7 +9,7 @@ import {
   getWaitlist, joinWaitlist, deleteWaitlistEntry, getAdminUser,
   getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers, uploadMemberPhoto, getMemberByPortalId,
   getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory,
-  getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, markAttendance, getMemberAttendanceStats, validateAndCheckIn
+  getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, getMemberAttendanceStats, validateAndCheckIn, autoExpireEvents
 } from './lib/db';
 import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
@@ -2533,7 +2533,7 @@ function PositionManager({ positions, onRefresh, setConfirmModal }: { positions:
 
 // --- Attendance Management (Phase 10) ---
 
-function AttendanceManagement({ events, members, fetchData, setConfirmModal }: any) {
+function AttendanceManagement({ events, fetchData, setConfirmModal }: any) {
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
@@ -2547,7 +2547,8 @@ function AttendanceManagement({ events, members, fetchData, setConfirmModal }: a
     start_time: '18:00',
     duration_minutes: 120,
     check_in_code: Math.floor(1000 + Math.random() * 9000).toString(),
-    is_active: true
+    is_active: true,
+    counts_toward_stats: true
   });
 
   const handleCreateEvent = async () => {
@@ -2564,7 +2565,8 @@ function AttendanceManagement({ events, members, fetchData, setConfirmModal }: a
         start_time: '18:00',
         duration_minutes: 120,
         check_in_code: Math.floor(1000 + Math.random() * 9000).toString(),
-        is_active: true
+        is_active: true,
+        counts_toward_stats: true
       });
     } catch (err) {
       console.error(err);
@@ -2593,6 +2595,15 @@ function AttendanceManagement({ events, members, fetchData, setConfirmModal }: a
   const handleToggleEvent = async (id: string, current: boolean) => {
     try {
       await updateAttendanceEvent(id, { is_active: !current });
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleToggleStatsCount = async (id: string, current: boolean) => {
+    try {
+      await updateAttendanceEvent(id, { counts_toward_stats: !current });
       await fetchData();
     } catch (err) {
       console.error(err);
@@ -2664,10 +2675,37 @@ function AttendanceManagement({ events, members, fetchData, setConfirmModal }: a
                         )}>
                           {event.is_active ? 'Active' : 'Expired'}
                         </span>
+                        {event.counts_toward_stats !== false && (
+                          <span className={cn(
+                            "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full",
+                            selectedEvent?.id === event.id ? "bg-white/30 text-white" : "bg-indigo-500/10 text-indigo-500"
+                          )}>
+                            Counts for %
+                          </span>
+                        )}
+                        {event.counts_toward_stats === false && (
+                          <span className={cn(
+                            "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full",
+                            selectedEvent?.id === event.id ? "bg-white/10 text-white/50" : "bg-slate-500/10 text-slate-400"
+                          )}>
+                            Excluded
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleToggleStatsCount(event.id, event.counts_toward_stats !== false); }}
+                      title={event.counts_toward_stats !== false ? "Exclude from Stats" : "Include in Stats"}
+                      className={cn(
+                        "p-2 rounded-lg transition-all",
+                        selectedEvent?.id === event.id ? "hover:bg-white/10" : "hover:bg-slate-100 dark:hover:bg-white/5",
+                        event.counts_toward_stats !== false ? "text-indigo-400" : "text-slate-400"
+                      )}
+                    >
+                      <Activity size={16} />
+                    </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleToggleEvent(event.id, event.is_active); }}
                       title={event.is_active ? "Close Attendance" : "Open Attendance"}
@@ -2831,6 +2869,25 @@ function AttendanceManagement({ events, members, fetchData, setConfirmModal }: a
                     />
                   </div>
                 </div>
+
+                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5">
+                  <div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">Count toward attendance %</p>
+                    <p className="text-[10px] text-slate-500 font-medium mt-0.5">Toggle off for optional events</p>
+                  </div>
+                  <button
+                    onClick={() => setForm({ ...form, counts_toward_stats: !form.counts_toward_stats })}
+                    className={cn(
+                      "w-12 h-6 rounded-full transition-colors relative",
+                      form.counts_toward_stats ? "bg-indigo-500" : "bg-slate-300 dark:bg-slate-600"
+                    )}
+                  >
+                    <div className={cn(
+                      "absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform",
+                      form.counts_toward_stats && "translate-x-6"
+                    )} />
+                  </button>
+                </div>
               </div>
 
               <div className="flex gap-4 pt-4">
@@ -2853,7 +2910,7 @@ function AttendanceManagement({ events, members, fetchData, setConfirmModal }: a
 
 // --- Admin View ---
 
-function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () => void, confirmModal: any, setConfirmModal: any }) {
+function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setConfirmModal: any }) {
   const [activeTab, setActiveTab] = useState('list');
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [waitlist, setWaitlist] = useState<any[]>([]);
@@ -2901,7 +2958,7 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
         getWaitlist(),
         getMembers(),
         getMemberPositions(),
-        getAttendanceEvents()
+        autoExpireEvents().then(() => getAttendanceEvents())
       ]);
 
       const [configsRes, regsRes, repsRes, weeksRes, waitRes, memsRes, posRes, attendanceRes] = results;
@@ -3006,7 +3063,7 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
         try {
           await deleteRepertoire(submissionId);
           await fetchData(); // Immediate reload
-          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setConfirmModal((prev: any) => ({ ...prev, isOpen: false }));
         } catch (err: any) {
           console.error(err);
           setConfirmModal({
@@ -3111,7 +3168,7 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
           await deleteAllRepertoires();
           await fetchData(); // Immediate reload
           setSelectedRepertoires([]);
-          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setConfirmModal((prev: any) => ({ ...prev, isOpen: false }));
         } catch (err: any) {
           console.error(err);
           setConfirmModal({
@@ -3783,14 +3840,14 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
                     <div className="flex gap-2">
                       <button
                         disabled={currentPage <= 1}
-                        onClick={() => setCurrentPage(prev => prev - 1)}
+                        onClick={() => setCurrentPage((prev: number) => prev - 1)}
                         className="p-2 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all text-slate-600 dark:text-slate-400"
                       >
                         <ChevronLeft size={18} />
                       </button>
                       <button
                         disabled={currentPage >= totalPages}
-                        onClick={() => setCurrentPage(prev => prev + 1)}
+                        onClick={() => setCurrentPage((prev: number) => prev + 1)}
                         className="p-2 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all text-slate-600 dark:text-slate-400"
                       >
                         <ChevronRight size={18} />
@@ -4117,6 +4174,7 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
               <LiveModeView
                 registrations={registrations}
                 performanceWeeks={performanceWeeks}
+                setConfirmModal={setConfirmModal}
                 onUpdateStatus={async (id: string, status: string) => {
                   try {
                     await updatePerformanceStatus(id, status);
@@ -5641,7 +5699,7 @@ export default function App() {
         <Route path="/members" element={<MembersView />} />
         <Route
           path="/admin"
-          element={isAuthenticated ? <AdminView onLogout={handleLogout} confirmModal={confirmModal} setConfirmModal={setConfirmModal} /> : <Navigate to="/login" replace />}
+          element={isAuthenticated ? <AdminView onLogout={handleLogout} setConfirmModal={setConfirmModal} /> : <Navigate to="/login" replace />}
         />
         <Route path="/login" element={<LoginView onLogin={handleLogin} />} />
         <Route path="/portal" element={<MemberPortalView member={portalMember} onLogin={handlePortalLogin} onLogout={handlePortalLogout} setConfirmModal={setConfirmModal} />} />
