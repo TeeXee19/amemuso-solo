@@ -13,7 +13,7 @@ import {
 import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
   Users, Trash2, Loader2, X, Check, Music, Sun, Monitor, Moon, Edit2, Plus, Camera,
-  Calendar, Briefcase, History, ShieldAlert, Archive
+  Calendar, Briefcase, History, ShieldAlert, Archive, Youtube, Instagram, Facebook, Twitter, Video, Globe
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -96,7 +96,12 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
     registration_id: '',
     is_soloist: false,
     is_on_probation: false,
-    probation_until: ''
+    probation_until: '',
+    youtube: '',
+    instagram: '',
+    facebook: '',
+    twitter: '',
+    tiktok: ''
   });
 
   const [uploading, setUploading] = useState(false);
@@ -115,7 +120,12 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
         registration_id: member.registration_id || '',
         is_soloist: member.is_soloist || false,
         is_on_probation: member.is_on_probation || false,
-        probation_until: member.probation_until || ''
+        probation_until: member.probation_until || '',
+        youtube: member.youtube || '',
+        instagram: member.instagram || '',
+        facebook: member.facebook || '',
+        twitter: member.twitter || '',
+        tiktok: member.tiktok || ''
       });
     } else {
       setForm({
@@ -130,7 +140,12 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
         registration_id: '',
         is_soloist: false,
         is_on_probation: false,
-        probation_until: ''
+        probation_until: '',
+        youtube: '',
+        instagram: '',
+        facebook: '',
+        twitter: '',
+        tiktok: ''
       });
     }
   }, [member, isOpen]);
@@ -300,6 +315,67 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
                   placeholder="Tell us about the member..."
                 />
               </div>
+              <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-[2rem] border border-slate-200 dark:border-white/5 space-y-4">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500 mb-2">Social Media Links</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                      <Youtube size={12} className="text-rose-500" /> YouTube
+                    </label>
+                    <input
+                      value={form.youtube}
+                      onChange={e => setForm({ ...form, youtube: e.target.value })}
+                      className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
+                      placeholder="https://youtube.com/..."
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                      <Instagram size={12} className="text-pink-500" /> Instagram
+                    </label>
+                    <input
+                      value={form.instagram}
+                      onChange={e => setForm({ ...form, instagram: e.target.value })}
+                      className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
+                      placeholder="@username"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                      <Facebook size={12} className="text-blue-600" /> Facebook
+                    </label>
+                    <input
+                      value={form.facebook}
+                      onChange={e => setForm({ ...form, facebook: e.target.value })}
+                      className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
+                      placeholder="facebook.com/..."
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                      <Twitter size={12} className="text-slate-900 dark:text-white" /> X (Twitter)
+                    </label>
+                    <input
+                      value={form.twitter}
+                      onChange={e => setForm({ ...form, twitter: e.target.value })}
+                      className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
+                      placeholder="@username"
+                    />
+                  </div>
+                  <div className="space-y-1 col-span-2">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                      <Video size={12} className="text-teal-500" /> TikTok
+                    </label>
+                    <input
+                      value={form.tiktok}
+                      onChange={e => setForm({ ...form, tiktok: e.target.value })}
+                      className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
+                      placeholder="tiktok.com/@..."
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="p-4 bg-indigo-500/5 rounded-2xl border border-indigo-500/10 space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Is Soloist?</span>
@@ -1436,7 +1512,7 @@ function SoloistStatusView() {
 }
 // --- Members View (Phase 5) ---
 
-function MemberProfileModal({ member, isOpen, onClose, setConfirmModal }: any) {
+function MemberProfileModal({ member, isOpen, onClose, setConfirmModal, isAdmin = false }: any) {
   if (!member || !isOpen) return null;
 
   const avatarUrl = member.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(member.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
@@ -1590,8 +1666,38 @@ function MemberProfileModal({ member, isOpen, onClose, setConfirmModal }: any) {
             </div>
             <div className="space-y-1">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Phone Number</p>
-              <p className="text-sm font-bold text-slate-700 dark:text-slate-300 truncate">{member.phone || 'Private'}</p>
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-300 truncate">
+                {isAdmin ? (member.phone || 'N/A') : 'Private'}
+              </p>
             </div>
+          </div>
+
+          <div className="flex flex-wrap gap-4 pt-4 border-t border-slate-100 dark:border-white/5">
+            {member.youtube && (
+              <a href={member.youtube} target="_blank" rel="noopener noreferrer" className="p-3 bg-rose-500/10 text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all">
+                <Youtube size={18} />
+              </a>
+            )}
+            {member.instagram && (
+              <a href={member.instagram.startsWith('@') ? `https://instagram.com/${member.instagram.slice(1)}` : member.instagram} target="_blank" rel="noopener noreferrer" className="p-3 bg-pink-500/10 text-pink-500 rounded-2xl hover:bg-pink-500 hover:text-white transition-all">
+                <Instagram size={18} />
+              </a>
+            )}
+            {member.facebook && (
+              <a href={member.facebook} target="_blank" rel="noopener noreferrer" className="p-3 bg-blue-600/10 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all">
+                <Facebook size={18} />
+              </a>
+            )}
+            {member.twitter && (
+              <a href={member.twitter.startsWith('@') ? `https://x.com/${member.twitter.slice(1)}` : member.twitter} target="_blank" rel="noopener noreferrer" className="p-3 bg-slate-900/10 dark:bg-white/10 text-slate-900 dark:text-white rounded-2xl hover:bg-slate-900 dark:hover:bg-white hover:text-white dark:hover:text-black transition-all">
+                <Twitter size={18} />
+              </a>
+            )}
+            {member.tiktok && (
+              <a href={member.tiktok.startsWith('@') ? `https://tiktok.com/@${member.tiktok.replace('@', '')}` : member.tiktok} target="_blank" rel="noopener noreferrer" className="p-3 bg-teal-500/10 text-teal-500 rounded-2xl hover:bg-teal-500 hover:text-white transition-all">
+                <Video size={18} />
+              </a>
+            )}
           </div>
 
           <MemberHistoryView memberId={member.id} />
@@ -1811,6 +1917,7 @@ function MembersView() {
           member={selectedMember}
           isOpen={!!selectedMember}
           onClose={() => setSelectedMember(null)}
+          isAdmin={false}
         />
       </div>
     </Layout>
@@ -2717,7 +2824,11 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
       const sanitizedForm = {
         ...form,
         registration_id: form.registration_id || null,
-        position_id: form.position_id || null
+        position_id: form.position_id || null,
+        probation_until: form.probation_until || null,
+        joined_at: form.joined_at || null,
+        email: form.email || null,
+        phone: form.phone || null
       };
 
       if (editingMember) {
@@ -3778,6 +3889,7 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
           isOpen={!!selectedMember}
           onClose={() => setSelectedMember(null)}
           setConfirmModal={setConfirmModal}
+          isAdmin={true}
         />
 
         <MemberEntryModal
