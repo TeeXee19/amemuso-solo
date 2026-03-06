@@ -7,13 +7,15 @@ import {
   getConfigs, getRegistrations, registerSoloist, updateMaxSlots, updateConfig, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires, updatePerformanceStatus, resetPerformanceStatus,
   getPerformanceWeeks,
   getWaitlist, joinWaitlist, deleteWaitlistEntry, getAdminUser,
-  getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers, uploadMemberPhoto,
-  getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory
+  getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers, uploadMemberPhoto, getMemberByPortalId,
+  getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory,
+  getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, markAttendance, getMemberAttendanceStats, validateAndCheckIn
 } from './lib/db';
 import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
   Users, Trash2, Loader2, X, Check, Music, Sun, Monitor, Moon, Edit2, Plus, Camera,
-  Calendar, Briefcase, History, ShieldAlert, Archive, Youtube, Instagram, Facebook, Twitter, Video, Globe
+  Calendar, Briefcase, History, Archive, Youtube, Instagram, Facebook, Twitter, Video, CalendarCheck,
+  LogOut, CheckSquare, Lock, Trophy, User, ShieldCheck, ShieldAlert, Share2, Mail, Phone as PhoneIcon, Save
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -92,6 +94,13 @@ function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading, ico
 
 function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, loading, positions = [], setConfirmModal }: any) {
   const [form, setForm] = useState({
+    full_name: '',
+    voice_part: 'Soprano',
+    bio: '',
+    photo_url: '',
+    phone: '',
+    email: '',
+    joined_at: new Date().toISOString().split('T')[0],
     position_id: '',
     registration_id: '',
     is_soloist: false,
@@ -101,10 +110,17 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
     instagram: '',
     facebook: '',
     twitter: '',
-    tiktok: ''
+    tiktok: '',
+    portal_id: '',
+    portal_pin: ''
   });
 
+  const [activeTab, setActiveTab] = useState<'personal' | 'org' | 'access'>('personal');
   const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) setActiveTab('personal');
+  }, [isOpen]);
 
   useEffect(() => {
     if (member) {
@@ -125,7 +141,9 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
         instagram: member.instagram || '',
         facebook: member.facebook || '',
         twitter: member.twitter || '',
-        tiktok: member.tiktok || ''
+        tiktok: member.tiktok || '',
+        portal_id: member.portal_id || '',
+        portal_pin: member.portal_pin || ''
       });
     } else {
       setForm({
@@ -145,7 +163,9 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
         instagram: '',
         facebook: '',
         twitter: '',
-        tiktok: ''
+        tiktok: '',
+        portal_id: '',
+        portal_pin: ''
       });
     }
   }, [member, isOpen]);
@@ -177,291 +197,425 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
 
   if (!isOpen) return null;
 
+  const tabs = [
+    { id: 'personal', label: 'Personal', icon: User },
+    { id: 'org', label: 'Organization', icon: Briefcase },
+    { id: 'access', label: 'Access & Social', icon: ShieldCheck }
+  ];
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="w-full max-w-2xl bg-white dark:bg-[#131521] rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden"
+        className="w-full max-w-2xl bg-white dark:bg-[#131521] rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col max-h-[90vh]"
       >
-        <div className="p-8 space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">
-              {member ? 'Edit Member Profile' : 'New Member Profile'}
-            </h3>
-            <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors text-slate-500">
+        <div className="p-8 pb-4 shrink-0">
+          <div className="flex justify-between items-center mb-6">
+            <div className="space-y-1">
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight leading-none">
+                {member ? 'Edit Member Profile' : 'New Member Profile'}
+              </h3>
+              <p className="text-[10px] text-slate-500 font-bold tracking-widest uppercase opacity-70">
+                {member ? `Record ID: ${member.id.substring(0, 8)}` : 'Create a new chorale record'}
+              </p>
+            </div>
+            <button onClick={onClose} className="p-3 hover:bg-slate-100 dark:hover:bg-white/5 rounded-2xl transition-all text-slate-500 hover:text-rose-500">
               <X size={20} />
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-6">
-              <div className="flex flex-col items-center gap-4">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block self-start">Profile Photo</label>
-                <div className="relative group w-full aspect-square max-w-[240px] rounded-3xl overflow-hidden bg-slate-50 dark:bg-[#0b0d17] border-2 border-dashed border-slate-200 dark:border-white/10 flex flex-col items-center justify-center text-center p-4 transition-all hover:border-indigo-500/50">
-                  {form.photo_url || uploading ? (
-                    <>
-                      {uploading ? (
-                        <div className="absolute inset-0 z-10 bg-white/80 dark:bg-black/80 flex items-center justify-center">
-                          <Loader2 className="animate-spin text-indigo-500" size={32} />
-                        </div>
-                      ) : null}
-                      <img
-                        src={form.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(form.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`}
-                        alt=""
-                        className="w-full h-full object-cover rounded-2xl"
-                      />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <button className="p-3 bg-white/20 backdrop-blur-md rounded-2xl text-white font-bold text-xs flex items-center gap-2">
-                          <Camera size={14} /> Change Photo
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="w-12 h-12 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto">
-                        <Camera size={24} />
-                      </div>
-                      <p className="text-xs text-slate-500 font-bold">Click to upload photo</p>
-                    </div>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Full Name</label>
-                <input
-                  value={form.full_name}
-                  onChange={e => setForm({ ...form, full_name: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
-                  placeholder="John Doe"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Voice Part</label>
-                <select
-                  value={form.voice_part}
-                  onChange={e => setForm({ ...form, voice_part: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none appearance-none"
-                >
-                  {VOICE_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Phone Number</label>
-                <input
-                  value={form.phone}
-                  onChange={e => setForm({ ...form, phone: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none"
-                  placeholder="080... or +234..."
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Email Address</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={e => setForm({ ...form, email: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none"
-                  placeholder="email@example.com"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Join Date</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input
-                      type="date"
-                      value={form.joined_at}
-                      onChange={e => setForm({ ...form, joined_at: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm focus:border-indigo-500 outline-none"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Position / Role</label>
-                  <div className="relative">
-                    <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <select
-                      value={form.position_id}
-                      onChange={e => setForm({ ...form, position_id: e.target.value })}
-                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm focus:border-indigo-500 outline-none appearance-none"
-                    >
-                      <option value="">Member</option>
-                      {positions.map((p: any) => (
-                        <option key={p.id} value={p.id}>{p.title}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Bio (Short)</label>
-                <textarea
-                  value={form.bio}
-                  onChange={e => setForm({ ...form, bio: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none min-h-[100px]"
-                  placeholder="Tell us about the member..."
-                />
-              </div>
-              <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-[2rem] border border-slate-200 dark:border-white/5 space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500 mb-2">Social Media Links</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
-                      <Youtube size={12} className="text-rose-500" /> YouTube
-                    </label>
-                    <input
-                      value={form.youtube}
-                      onChange={e => setForm({ ...form, youtube: e.target.value })}
-                      className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
-                      placeholder="https://youtube.com/..."
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
-                      <Instagram size={12} className="text-pink-500" /> Instagram
-                    </label>
-                    <input
-                      value={form.instagram}
-                      onChange={e => setForm({ ...form, instagram: e.target.value })}
-                      className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
-                      placeholder="@username"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
-                      <Facebook size={12} className="text-blue-600" /> Facebook
-                    </label>
-                    <input
-                      value={form.facebook}
-                      onChange={e => setForm({ ...form, facebook: e.target.value })}
-                      className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
-                      placeholder="facebook.com/..."
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
-                      <Twitter size={12} className="text-slate-900 dark:text-white" /> X (Twitter)
-                    </label>
-                    <input
-                      value={form.twitter}
-                      onChange={e => setForm({ ...form, twitter: e.target.value })}
-                      className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
-                      placeholder="@username"
-                    />
-                  </div>
-                  <div className="space-y-1 col-span-2">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
-                      <Video size={12} className="text-teal-500" /> TikTok
-                    </label>
-                    <input
-                      value={form.tiktok}
-                      onChange={e => setForm({ ...form, tiktok: e.target.value })}
-                      className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
-                      placeholder="tiktok.com/@..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 bg-indigo-500/5 rounded-2xl border border-indigo-500/10 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Is Soloist?</span>
-                  <button
-                    onClick={() => setForm({ ...form, is_soloist: !form.is_soloist })}
-                    className={cn(
-                      "w-12 h-6 rounded-full transition-all relative",
-                      form.is_soloist ? "bg-indigo-600" : "bg-slate-300 dark:bg-white/10"
-                    )}
-                  >
-                    <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all", form.is_soloist ? "left-7" : "left-1")} />
-                  </button>
-                </div>
-                {form.is_soloist && (
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-indigo-400">Link to Registration Slot</label>
-                    <select
-                      value={form.registration_id}
-                      onChange={e => setForm({ ...form, registration_id: e.target.value })}
-                      className="w-full bg-white dark:bg-[#131521] border border-indigo-500/20 rounded-lg px-3 py-2 text-xs focus:border-indigo-500 outline-none"
-                    >
-                      <option value="">Select Soloist Slot...</option>
-                      {registrations.map((r: any) => (
-                        <option key={r.id} value={r.id}>S-{r.slot_id}: {r.full_name}</option>
-                      ))}
-                    </select>
-                  </div>
+          <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1.5 rounded-2xl border border-slate-200 dark:border-white/5">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all",
+                  activeTab === tab.id
+                    ? "bg-white dark:bg-white/10 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                    : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
                 )}
+              >
+                <tab.icon size={14} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-indigo-500/10">
-                  <div className="flex items-center gap-2">
-                    <History size={14} className="text-slate-500" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">On Probation?</span>
+        <div className="p-8 pt-0 overflow-y-auto flex-1 custom-scrollbar">
+          <AnimatePresence mode="wait">
+            {activeTab === 'personal' && (
+              <motion.div
+                key="personal"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+                className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4"
+              >
+                <div className="space-y-6">
+                  <div className="flex flex-col items-center gap-4">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block self-start">Profile Photo</label>
+                    <div className="relative group w-full aspect-square max-w-[240px] rounded-3xl overflow-hidden bg-slate-50 dark:bg-[#0b0d17] border-2 border-dashed border-slate-200 dark:border-white/10 flex flex-col items-center justify-center text-center p-4 transition-all hover:border-indigo-500/50">
+                      {form.photo_url || uploading ? (
+                        <>
+                          {uploading ? (
+                            <div className="absolute inset-0 z-10 bg-white/80 dark:bg-black/80 flex items-center justify-center">
+                              <Loader2 className="animate-spin text-indigo-500" size={32} />
+                            </div>
+                          ) : null}
+                          <img
+                            src={form.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(form.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`}
+                            alt=""
+                            className="w-full h-full object-cover rounded-2xl"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <button className="p-3 bg-white/20 backdrop-blur-md rounded-2xl text-white font-bold text-xs flex items-center gap-2">
+                              <Camera size={14} /> Change Photo
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="w-12 h-12 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto">
+                            <Camera size={24} />
+                          </div>
+                          <p className="text-xs text-slate-500 font-bold">Click to upload photo</p>
+                        </div>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </div>
                   </div>
-                  <button
-                    onClick={() => {
-                      const newProbation = !form.is_on_probation;
-                      let until = form.probation_until;
-                      if (newProbation && !until) {
-                        const d = new Date(form.joined_at);
-                        d.setMonth(d.getMonth() + 3);
-                        until = d.toISOString().split('T')[0];
-                      }
-                      setForm({ ...form, is_on_probation: newProbation, probation_until: until });
-                    }}
-                    className={cn(
-                      "w-12 h-6 rounded-full transition-all relative",
-                      form.is_on_probation ? "bg-amber-500" : "bg-slate-300 dark:bg-white/10"
-                    )}
-                  >
-                    <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all", form.is_on_probation ? "left-7" : "left-1")} />
-                  </button>
                 </div>
 
-                {form.is_on_probation && (
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest text-amber-500">Probation Period Until</label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500/50" size={12} />
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Full Name</label>
+                    <input
+                      value={form.full_name}
+                      onChange={e => setForm({ ...form, full_name: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all placeholder:opacity-50"
+                      placeholder="John Doe"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Voice Part</label>
+                    <select
+                      value={form.voice_part}
+                      onChange={e => setForm({ ...form, voice_part: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none appearance-none"
+                    >
+                      {VOICE_PARTS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Bio (Short)</label>
+                    <textarea
+                      value={form.bio}
+                      onChange={e => setForm({ ...form, bio: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none min-h-[140px] resize-none"
+                      placeholder="Tell us about the member..."
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'org' && (
+              <motion.div
+                key="org"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-6 py-4"
+              >
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Phone Number</label>
+                      <div className="relative">
+                        <PhoneIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                          value={form.phone}
+                          onChange={e => setForm({ ...form, phone: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm focus:border-indigo-500 outline-none"
+                          placeholder="080... or +234..."
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Email Address</label>
+                      <div className="relative">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                          type="email"
+                          value={form.email}
+                          onChange={e => setForm({ ...form, email: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm focus:border-indigo-500 outline-none"
+                          placeholder="email@example.com"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Join Date</label>
+                      <div className="relative">
+                        <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                          type="date"
+                          value={form.joined_at}
+                          onChange={e => setForm({ ...form, joined_at: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm focus:border-indigo-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Position / Role</label>
+                      <div className="relative">
+                        <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <select
+                          value={form.position_id}
+                          onChange={e => setForm({ ...form, position_id: e.target.value })}
+                          className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm focus:border-indigo-500 outline-none appearance-none"
+                        >
+                          <option value="">Member</option>
+                          {positions.map((p: any) => (
+                            <option key={p.id} value={p.id}>{p.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-8 bg-slate-50 dark:bg-white/5 rounded-[2.5rem] border border-slate-200 dark:border-white/5 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Soloist Recognition</span>
+                      <p className="text-[10px] text-slate-400 italic">Member is eligible for solo slots and rewards</p>
+                    </div>
+                    <button
+                      onClick={() => setForm({ ...form, is_soloist: !form.is_soloist })}
+                      className={cn(
+                        "w-14 h-8 rounded-full transition-all relative",
+                        form.is_soloist ? "bg-indigo-600 shadow-lg shadow-indigo-500/20" : "bg-slate-300 dark:bg-white/10"
+                      )}
+                    >
+                      <div className={cn("absolute top-1.5 w-5 h-5 bg-white rounded-full transition-all shadow-sm", form.is_soloist ? "left-7.5" : "left-1.5")} />
+                    </button>
+                  </div>
+
+                  {form.is_soloist && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-2 pt-2">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
+                        <Trophy size={12} /> Active Registration Link
+                      </label>
+                      <select
+                        value={form.registration_id}
+                        onChange={e => setForm({ ...form, registration_id: e.target.value })}
+                        className="w-full bg-white dark:bg-[#131521] border border-indigo-500/20 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none"
+                      >
+                        <option value="">Select slot to link history...</option>
+                        {registrations.map((r: any) => (
+                          <option key={r.id} value={r.id}>Slot {r.slot_id}: {r.full_name}</option>
+                        ))}
+                      </select>
+                    </motion.div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-6 border-t border-slate-200 dark:border-white/10">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <History size={14} className="text-amber-500" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Probationary Period</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 italic">New members or those under observation</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const newProbation = !form.is_on_probation;
+                        let until = form.probation_until;
+                        if (newProbation && !until) {
+                          const d = new Date(form.joined_at);
+                          d.setMonth(d.getMonth() + 3);
+                          until = d.toISOString().split('T')[0];
+                        }
+                        setForm({ ...form, is_on_probation: newProbation, probation_until: until });
+                      }}
+                      className={cn(
+                        "w-14 h-8 rounded-full transition-all relative",
+                        form.is_on_probation ? "bg-amber-500 shadow-lg shadow-amber-500/20" : "bg-slate-300 dark:bg-white/10"
+                      )}
+                    >
+                      <div className={cn("absolute top-1.5 w-5 h-5 bg-white rounded-full transition-all shadow-sm", form.is_on_probation ? "left-7.5" : "left-1.5")} />
+                    </button>
+                  </div>
+
+                  {form.is_on_probation && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="space-y-2 pt-2">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-2">
+                        <Calendar size={12} /> Probation End Date
+                      </label>
                       <input
                         type="date"
                         value={form.probation_until}
                         onChange={e => setForm({ ...form, probation_until: e.target.value })}
-                        className="w-full bg-white dark:bg-[#131521] border border-amber-500/20 rounded-lg pl-9 pr-3 py-2 text-xs focus:border-amber-500 outline-none font-bold text-amber-600"
+                        className="w-full bg-white dark:bg-[#131521] border border-amber-500/20 rounded-xl px-4 py-3 text-sm focus:border-amber-500 outline-none font-bold text-amber-600"
+                      />
+                    </motion.div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'access' && (
+              <motion.div
+                key="access"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-8 py-4"
+              >
+                <div className="p-8 bg-emerald-500/5 rounded-[2.5rem] border border-emerald-500/10 space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-500">
+                      <Lock size={20} />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Secure Portal Credentials</h4>
+                      <p className="text-[10px] text-slate-500 italic">Used by member to log into their private dashboard</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Member Unique Code</label>
+                      <input
+                        value={form.portal_id}
+                        onChange={e => setForm({ ...form, portal_id: e.target.value })}
+                        className="w-full bg-white dark:bg-[#131521] border border-emerald-500/20 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none uppercase font-bold tracking-wider"
+                        placeholder="M-01"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Private Security PIN</label>
+                      <input
+                        value={form.portal_pin}
+                        onChange={e => setForm({ ...form, portal_pin: e.target.value })}
+                        maxLength={4}
+                        className="w-full bg-white dark:bg-[#131521] border border-emerald-500/20 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-center font-black tracking-[0.4em]"
+                        placeholder="••••"
                       />
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
+                </div>
 
-          <div className="flex gap-4 pt-6 border-t border-slate-100 dark:border-white/5">
+                <div className="space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-500">
+                      <Share2 size={20} />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">Social Connections</h4>
+                      <p className="text-[10px] text-slate-500 italic">Publicly visible handles or links on the roster</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                        <Youtube size={14} className="text-rose-500" /> YouTube
+                      </label>
+                      <input
+                        value={form.youtube}
+                        onChange={e => setForm({ ...form, youtube: e.target.value })}
+                        className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-xs focus:border-indigo-500 outline-none"
+                        placeholder="Channel URL"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                        <Instagram size={14} className="text-pink-500" /> Instagram
+                      </label>
+                      <input
+                        value={form.instagram}
+                        onChange={e => setForm({ ...form, instagram: e.target.value })}
+                        className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-xs focus:border-indigo-500 outline-none"
+                        placeholder="@username"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                        <Facebook size={14} className="text-blue-600" /> Facebook
+                      </label>
+                      <input
+                        value={form.facebook}
+                        onChange={e => setForm({ ...form, facebook: e.target.value })}
+                        className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-xs focus:border-indigo-500 outline-none"
+                        placeholder="Profile Link"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                        <Twitter size={14} className="text-slate-900 dark:text-white" /> X (Twitter)
+                      </label>
+                      <input
+                        value={form.twitter}
+                        onChange={e => setForm({ ...form, twitter: e.target.value })}
+                        className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-xs focus:border-indigo-500 outline-none"
+                        placeholder="@username"
+                      />
+                    </div>
+                    <div className="space-y-2 col-span-2">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                        <Video size={14} className="text-teal-500" /> TikTok
+                      </label>
+                      <input
+                        value={form.tiktok}
+                        onChange={e => setForm({ ...form, tiktok: e.target.value })}
+                        className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-xs focus:border-indigo-500 outline-none"
+                        placeholder="tiktok.com/@..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <div className="p-8 border-t border-slate-100 dark:border-white/5 bg-white dark:bg-[#131521] shrink-0">
+          <div className="flex gap-4">
             <button
               onClick={onClose}
-              className="flex-1 py-4 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 font-bold rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all"
+              className="px-8 py-4 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 font-bold rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all border border-transparent hover:border-slate-200"
             >
               Cancel
             </button>
             <button
               onClick={() => onSave(form)}
               disabled={loading || !form.full_name}
-              className="flex-[2] py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-500/20 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-500/20 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 group"
             >
-              {loading ? <Loader2 size={20} className="animate-spin" /> : <Check size={20} />}
-              {member ? 'Update Profile' : 'Create Profile'}
+              {loading ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <>
+                  {member ? <Save size={18} className="group-hover:scale-110 transition-transform" /> : <Plus size={18} className="group-hover:scale-110 transition-transform" />}
+                  {member ? 'Save Profile' : 'Create Profile'}
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -474,6 +628,7 @@ function AdminSidebar({ activeTab, setActiveTab, repertoires, waitlist, onLogout
   const menuItems = [
     { id: 'list', label: 'Member List', icon: Users },
     { id: 'checkin', label: 'Check-in', icon: Check, color: 'text-emerald-500' },
+    { id: 'attendance', label: 'Attendance', icon: CalendarCheck, color: 'text-indigo-500' },
     { id: 'members', label: 'Member Profiles', icon: Grid },
     { id: 'repertoire', label: 'Song Approvals', icon: Music, badge: repertoires.filter((s: any) => s.status === 'pending').length },
     { id: 'waitlist', label: 'Waitlist', icon: History, badge: waitlist.length },
@@ -645,6 +800,15 @@ function Layout({ children, subtitle, isAuthenticated, onLogout, sidebar }: any)
             >
               Roster
             </button>
+            <button
+              onClick={() => navigate('/portal')}
+              className={cn(
+                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20",
+                location.pathname.startsWith('/portal') && "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+              )}
+            >
+              <Users size={14} /> Member Portal
+            </button>
           </div>
 
           {/* User Nav (Only show in header if no sidebar) */}
@@ -698,6 +862,12 @@ function Layout({ children, subtitle, isAuthenticated, onLogout, sidebar }: any)
                     className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
                   >
                     Roster
+                  </button>
+                  <button
+                    onClick={() => { setIsMobileMenuOpen(false); navigate('/portal'); }}
+                    className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left flex items-center gap-3", location.pathname.startsWith('/portal') ? "bg-indigo-600 text-white" : "bg-indigo-500/10 text-indigo-600")}
+                  >
+                    <Users size={18} /> Member Portal
                   </button>
                   <button
                     onClick={() => { setIsMobileMenuOpen(false); navigate('/members'); }}
@@ -1513,6 +1683,8 @@ function SoloistStatusView() {
 // --- Members View (Phase 5) ---
 
 function MemberProfileModal({ member, isOpen, onClose, setConfirmModal, isAdmin = false }: any) {
+
+
   if (!member || !isOpen) return null;
 
   const avatarUrl = member.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(member.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
@@ -1699,6 +1871,7 @@ function MemberProfileModal({ member, isOpen, onClose, setConfirmModal, isAdmin 
               </a>
             )}
           </div>
+
 
           <MemberHistoryView memberId={member.id} />
 
@@ -2358,6 +2531,326 @@ function PositionManager({ positions, onRefresh, setConfirmModal }: { positions:
   );
 }
 
+// --- Attendance Management (Phase 10) ---
+
+function AttendanceManagement({ events, members, fetchData, setConfirmModal }: any) {
+  const [isAddingEvent, setIsAddingEvent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [records, setRecords] = useState<any[]>([]);
+  const [loadingRecords, setLoadingRecords] = useState(false);
+
+  const [form, setForm] = useState({
+    title: '',
+    type: 'rehearsal',
+    date: new Date().toISOString().split('T')[0],
+    start_time: '18:00',
+    duration_minutes: 120,
+    check_in_code: Math.floor(1000 + Math.random() * 9000).toString(),
+    is_active: true
+  });
+
+  const handleCreateEvent = async () => {
+    if (!form.title || !form.start_time) return;
+    setLoading(true);
+    try {
+      await createAttendanceEvent(form);
+      setIsAddingEvent(false);
+      await fetchData();
+      setForm({
+        title: '',
+        type: 'rehearsal',
+        date: new Date().toISOString().split('T')[0],
+        start_time: '18:00',
+        duration_minutes: 120,
+        check_in_code: Math.floor(1000 + Math.random() * 9000).toString(),
+        is_active: true
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteEvent = async (id: string, title: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Event",
+      message: `Are you sure you want to delete ${title}? All attendance records for this event will be lost.`,
+      icon: Trash2,
+      confirmText: "Delete",
+      color: "bg-rose-600",
+      onConfirm: async () => {
+        try {
+          await deleteAttendanceEvent(id);
+          await fetchData();
+        } catch (err) { console.error(err); }
+      }
+    });
+  };
+
+  const handleToggleEvent = async (id: string, current: boolean) => {
+    try {
+      await updateAttendanceEvent(id, { is_active: !current });
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedEvent) {
+      setLoadingRecords(true);
+      getAttendanceRecords(selectedEvent.id)
+        .then(setRecords)
+        .finally(() => setLoadingRecords(false));
+    }
+  }, [selectedEvent]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+            <CalendarCheck className="text-indigo-500" size={28} />
+            Attendance Management
+          </h2>
+          <p className="text-sm text-slate-500 font-medium">Create and manage rehearsal attendance codes</p>
+        </div>
+        <button
+          onClick={() => setIsAddingEvent(true)}
+          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-600/20 hover:scale-105 transition-all"
+        >
+          <Plus size={16} /> New Attendance Event
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500 px-2">Recent Events</h3>
+          <div className="space-y-3">
+            {events.map((event: any) => (
+              <div
+                key={event.id}
+                onClick={() => setSelectedEvent(event)}
+                className={cn(
+                  "p-5 rounded-[2rem] border transition-all cursor-pointer group",
+                  selectedEvent?.id === event.id
+                    ? "bg-indigo-600 border-indigo-500 shadow-xl shadow-indigo-600/20 text-white"
+                    : "bg-white dark:bg-[#131521] border-slate-200 dark:border-white/5 hover:border-indigo-500/50"
+                )}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center",
+                      selectedEvent?.id === event.id ? "bg-white/20" : "bg-indigo-500/10 text-indigo-500"
+                    )}>
+                      {event.type === 'rehearsal' ? <Music size={20} /> : event.type === 'concert' ? <Activity size={20} /> : <Calendar size={20} />}
+                    </div>
+                    <div>
+                      <h4 className="font-bold leading-tight">{event.title}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={cn(
+                          "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full",
+                          selectedEvent?.id === event.id ? "bg-white/20 text-white" : "bg-slate-100 dark:bg-white/10 text-slate-500"
+                        )}>
+                          {new Date(event.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • {event.start_time.slice(0, 5)}
+                        </span>
+                        <span className={cn(
+                          "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full",
+                          event.is_active ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"
+                        )}>
+                          {event.is_active ? 'Active' : 'Expired'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleToggleEvent(event.id, event.is_active); }}
+                      title={event.is_active ? "Close Attendance" : "Open Attendance"}
+                      className={cn(
+                        "p-2 rounded-lg transition-all",
+                        selectedEvent?.id === event.id ? "hover:bg-white/10" : "hover:bg-slate-100 dark:hover:bg-white/5"
+                      )}
+                    >
+                      {event.is_active ? <X size={16} /> : <Check size={16} />}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event.id, event.title); }}
+                      className={cn(
+                        "p-2 rounded-lg transition-all text-rose-400 hover:bg-rose-500/10",
+                      )}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-4 border-t border-white/10">
+                  <div>
+                    <p className={cn("text-[9px] font-black uppercase tracking-widest", selectedEvent?.id === event.id ? "text-indigo-200" : "text-slate-400")}>Check-in Code</p>
+                    <p className="text-xl font-black tracking-[0.3em] font-mono">{event.check_in_code}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={cn("text-[9px] font-black uppercase tracking-widest", selectedEvent?.id === event.id ? "text-indigo-200" : "text-slate-400")}>Duration</p>
+                    <p className="font-bold">{event.duration_minutes}m</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {events.length === 0 && (
+              <div className="p-10 text-center border-2 border-dashed border-slate-200 dark:border-white/5 rounded-[2.5rem]">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">No events created yet</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500 px-2">Check-in Details</h3>
+          {selectedEvent ? (
+            <div className="bg-white dark:bg-[#131521] rounded-[2.5rem] border border-slate-200 dark:border-white/5 p-8 h-full min-h-[400px]">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Currently Viewing</p>
+                  <h4 className="text-xl font-bold text-slate-900 dark:text-white">{selectedEvent.title}</h4>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Check-ins</p>
+                  <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{records.length}</p>
+                </div>
+              </div>
+
+              {loadingRecords ? (
+                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-500" /></div>
+              ) : (
+                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                  {records.map((record: any) => (
+                    <div key={record.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 text-[10px] font-black uppercase">
+                          {record.members?.voice_part?.[0]}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{record.members?.full_name}</p>
+                          <p className="text-[9px] text-slate-500">{new Date(record.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {records.length === 0 && (
+                    <div className="text-center py-20 text-slate-500 font-bold uppercase tracking-widest text-xs">No check-ins yet</div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-[#131521] rounded-[2.5rem] border border-slate-200 dark:border-white/5 p-20 text-center space-y-4">
+              <div className="w-16 h-16 bg-slate-100 dark:bg-white/5 rounded-2xl flex items-center justify-center mx-auto text-slate-400">
+                <CalendarCheck size={32} />
+              </div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Select an event to view details</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {isAddingEvent && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsAddingEvent(false)} />
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative w-full max-w-lg bg-white dark:bg-[#131521] rounded-[3rem] shadow-2xl overflow-hidden border border-slate-200 dark:border-white/10">
+            <div className="p-8 space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase italic tracking-tighter">New Attendance</h3>
+                <button onClick={() => setIsAddingEvent(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-all"><X size={20} /></button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Event Title</label>
+                  <input
+                    value={form.title}
+                    onChange={e => setForm({ ...form, title: e.target.value })}
+                    placeholder="e.g. Monday Rehearsal"
+                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-5 py-4 text-xs font-bold outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Type</label>
+                    <select
+                      value={form.type}
+                      onChange={e => setForm({ ...form, type: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-5 py-4 text-xs font-bold outline-none focus:border-indigo-500"
+                    >
+                      <option value="rehearsal">Rehearsal</option>
+                      <option value="concert">Concert</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Start Time</label>
+                    <input
+                      type="time"
+                      value={form.start_time}
+                      onChange={e => setForm({ ...form, start_time: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-5 py-4 text-xs font-bold outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Date</label>
+                    <input
+                      type="date"
+                      value={form.date}
+                      onChange={e => setForm({ ...form, date: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-5 py-4 text-xs font-bold outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Duration (Mins)</label>
+                    <input
+                      type="number"
+                      value={form.duration_minutes}
+                      onChange={e => setForm({ ...form, duration_minutes: parseInt(e.target.value) })}
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-5 py-4 text-xs font-bold outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Check-in Code</label>
+                  <div className="relative">
+                    <input
+                      value={form.check_in_code}
+                      onChange={e => setForm({ ...form, check_in_code: e.target.value })}
+                      className="w-full bg-indigo-500/5 border-2 border-indigo-500/20 rounded-2xl px-5 py-6 text-2xl font-black text-center tracking-[0.5em] outline-none focus:border-indigo-500 uppercase"
+                      maxLength={4}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button onClick={() => setIsAddingEvent(false)} className="flex-1 py-4 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 font-bold rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all">Cancel</button>
+                <button
+                  onClick={handleCreateEvent}
+                  disabled={loading || !form.title}
+                  className="flex-1 py-4 bg-indigo-600 text-white font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl shadow-xl shadow-indigo-600/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Create Event'}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Admin View ---
 
 function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () => void, confirmModal: any, setConfirmModal: any }) {
@@ -2368,6 +2861,7 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
   const [performanceWeeks, setPerformanceWeeks] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [positions, setPositions] = useState<any[]>([]);
+  const [attendanceEvents, setAttendanceEvents] = useState<any[]>([]);
   const [selectedMember, setSelectedMember] = useState<any>(null);
   const [maxSlots, setMaxSlots] = useState(60);
   const [defaultProbationMonths, setDefaultProbationMonths] = useState(3);
@@ -2406,10 +2900,11 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
         getPerformanceWeeks(),
         getWaitlist(),
         getMembers(),
-        getMemberPositions()
+        getMemberPositions(),
+        getAttendanceEvents()
       ]);
 
-      const [configsRes, regsRes, repsRes, weeksRes, waitRes, memsRes, posRes] = results;
+      const [configsRes, regsRes, repsRes, weeksRes, waitRes, memsRes, posRes, attendanceRes] = results;
 
       if (configsRes.status === 'fulfilled') {
         if ((configsRes.value as any).max_slots) setMaxSlots(parseInt((configsRes.value as any).max_slots));
@@ -2421,7 +2916,8 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
       if (waitRes.status === 'fulfilled') setWaitlist(waitRes.value as any);
       if (memsRes.status === 'fulfilled') setMembers(memsRes.value as any);
       if (posRes.status === 'fulfilled') setPositions(posRes.value as any);
-      else console.error("Members fetch failed:", (memsRes as any).reason);
+      if (attendanceRes.status === 'fulfilled') setAttendanceEvents(attendanceRes.value as any);
+      else console.error("Members/Attendance fetch failed:", (memsRes as any).reason);
 
     } catch (err) {
       console.error("Critical fetch error:", err);
@@ -2437,11 +2933,15 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
     const sub_reps = supabase.channel('admin_reps').on('postgres_changes', { event: '*', schema: 'public', table: 'repertoire_submissions' }, fetchData).subscribe();
     const sub_wait = supabase.channel('admin_wait').on('postgres_changes', { event: '*', schema: 'public', table: 'waitlist' }, fetchData).subscribe();
     const sub_members = supabase.channel('admin_members').on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, fetchData).subscribe();
+    const sub_attendance = supabase.channel('admin_attendance').on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_events' }, fetchData).subscribe();
+    const sub_records = supabase.channel('admin_records').on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_records' }, fetchData).subscribe();
     return () => {
       supabase.removeChannel(sub);
       supabase.removeChannel(sub_reps);
       supabase.removeChannel(sub_wait);
       supabase.removeChannel(sub_members);
+      supabase.removeChannel(sub_attendance);
+      supabase.removeChannel(sub_records);
     };
   }, []);
 
@@ -2828,7 +3328,9 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
         probation_until: form.probation_until || null,
         joined_at: form.joined_at || null,
         email: form.email || null,
-        phone: form.phone || null
+        phone: form.phone || null,
+        portal_id: form.portal_id?.trim().toUpperCase() || null,
+        portal_pin: form.portal_pin?.trim() || null
       };
 
       if (editingMember) {
@@ -3174,6 +3676,13 @@ function AdminView({ onLogout, confirmModal, setConfirmModal }: { onLogout: () =
                   </table>
                 </div>
               </div>
+            ) : activeTab === 'attendance' ? (
+              <AttendanceManagement
+                events={attendanceEvents}
+                members={members}
+                fetchData={fetchData}
+                setConfirmModal={setConfirmModal}
+              />
             ) : activeTab === 'archives' ? (
               <div className="space-y-6">
                 <div className="overflow-x-auto rounded-3xl border border-slate-200 dark:border-white/5">
@@ -4411,14 +4920,674 @@ function SongEntryView({ setConfirmModal }: { setConfirmModal: any }) {
 
 // --- Main App Entry ---
 
+// --- Member Portal View (Phase 6) ---
+
+function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [memberStats, setMemberStats] = useState<any>(null);
+
+  useEffect(() => {
+    if (member) {
+      getMemberAttendanceStats(member.id).then(setMemberStats).catch(console.error);
+    }
+  }, [member]);
+
+  const handleLoginSubmit = async (portalId: string, pin: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await getMemberByPortalId(portalId);
+      if (!data || data.portal_pin !== pin) {
+        throw new Error('Invalid Member Code or PIN');
+      }
+      onLogin(data);
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!member) {
+    return <PortalLogin onLogin={handleLoginSubmit} loading={loading} error={error} />;
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0b0d17] text-slate-900 dark:text-white">
+      {/* Sidebar for Portal */}
+      <div className="fixed left-0 top-0 bottom-0 w-72 bg-white dark:bg-[#131521] border-r border-slate-200 dark:border-white/5 z-50 hidden lg:block">
+        <div className="p-8 pb-4">
+          <div className="flex items-center gap-3 mb-12">
+            <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-500/20">
+              <Users size={20} />
+            </div>
+            <div>
+              <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest italic">Member Portal</h2>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-none mt-1">Amemuso Solo System</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {[
+              { id: 'dashboard', label: 'Dashboard', icon: Grid },
+              { id: 'history', label: 'My History', icon: History },
+              { id: 'profile', label: 'Manage Profile', icon: Edit2 }
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={cn(
+                  "w-full flex items-center gap-4 px-6 py-4 rounded-[1.5rem] transition-all group relative",
+                  activeTab === item.id
+                    ? "bg-indigo-600 text-white shadow-xl shadow-indigo-500/20"
+                    : "text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/5"
+                )}
+              >
+                <item.icon size={18} />
+                <span className="text-xs font-black uppercase tracking-widest">{item.label}</span>
+                {activeTab === item.id && (
+                  <motion.div layoutId="portal-active" className="absolute left-0 w-1.5 h-6 bg-white rounded-r-full" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="absolute bottom-8 left-0 right-0 px-8">
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-4 px-6 py-4 rounded-[1.5rem] text-rose-500 hover:bg-rose-500/10 transition-all font-black"
+          >
+            <LogOut size={18} />
+            <span className="text-xs uppercase tracking-widest">Sign Out</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="lg:pl-72 min-h-screen">
+        <header className="h-24 bg-white/80 dark:bg-[#131521]/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 dark:border-white/5 px-8 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-white/10">
+              <img src={member.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(member.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`} alt="" className="w-full h-full object-cover" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900 dark:text-white leading-tight">{member.full_name}</h2>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{member.voice_part} • {member.portal_id}</p>
+            </div>
+          </div>
+
+          <Link to="/" className="px-6 py-3 bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 font-black text-[10px] uppercase tracking-widest rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all active:scale-95">
+            Public View
+          </Link>
+        </header>
+
+        <main className="p-8 lg:p-12">
+          {activeTab === 'dashboard' && <PortalDashboard member={member} stats={memberStats} />}
+          {activeTab === 'history' && <PortalHistory memberId={member.id} />}
+          {activeTab === 'profile' && <PortalProfileEditor member={member} onUpdate={onLogin} setConfirmModal={setConfirmModal} />}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function PortalLogin({ onLogin, loading, error }: any) {
+  const [portalId, setPortalId] = useState('');
+  const [pin, setPin] = useState('');
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0b0d17] flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-md bg-white dark:bg-[#131521] rounded-[3rem] shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden"
+      >
+        <div className="p-10 space-y-8">
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 bg-indigo-600 rounded-[1.5rem] flex items-center justify-center text-white shadow-xl shadow-indigo-500/20 mx-auto mb-6">
+              <Lock size={32} />
+            </div>
+            <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">Member Portal</h2>
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-[0.2em]">Secure Private Access</p>
+          </div>
+
+          <form onSubmit={e => { e.preventDefault(); onLogin(portalId, pin); }} className="space-y-6">
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Member Code</label>
+                <div className="relative">
+                  <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    value={portalId}
+                    onChange={e => setPortalId(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm focus:border-indigo-500 outline-none uppercase font-bold tracking-widest"
+                    placeholder="E.G. M-01"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Security PIN</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    type="password"
+                    value={pin}
+                    maxLength={4}
+                    onChange={e => setPin(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm focus:border-indigo-500 outline-none tracking-widest"
+                    placeholder="••••"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <motion.p initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-xs text-rose-500 font-bold text-center bg-rose-500/10 py-3 rounded-xl border border-rose-500/20">
+                {error}
+              </motion.p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || !portalId || !pin}
+              className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-xl shadow-indigo-500/20 hover:scale-[1.02] active:scale-98 transition-all disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="animate-spin mx-auto" size={18} /> : 'Login to Portal'}
+            </button>
+          </form>
+
+          <div className="pt-6 border-t border-slate-100 dark:border-white/5 text-center">
+            <Link to="/" className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-500 transition-colors">
+              Back to Main Landing
+            </Link>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function PortalDashboard({ member, stats }: any) {
+  const [code, setCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+
+  const handleCheckIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!code || code.length < 4) return;
+
+    setLoading(true);
+    setMessage(null);
+    try {
+      await validateAndCheckIn(member.id, code);
+      setMessage({ text: 'Check-in successful! Attendance recorded.', type: 'success' });
+      setCode('');
+      // Force refresh stats if needed, or rely on parent re-render if we had a way to trigger it.
+      // Usually, successful check-in would want to refresh the stats object.
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Check-in failed.', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="bg-indigo-600 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-2xl shadow-indigo-500/30">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+          <div className="space-y-4">
+            <h1 className="text-4xl font-black italic uppercase tracking-tight">Welcome Back,<br />{member.full_name}</h1>
+            <div className="flex flex-wrap gap-2">
+              <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-lg text-[9px] font-black uppercase tracking-widest">{member.voice_part}</span>
+              <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-lg text-[9px] font-black uppercase tracking-widest">Joined {new Date(member.joined_at).getFullYear()}</span>
+              {member.is_on_probation && <span className="px-3 py-1 bg-amber-400 text-amber-900 rounded-lg text-[9px] font-black uppercase tracking-widest">On Probation</span>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 lg:flex gap-4">
+            <div className="bg-white/10 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 min-w-[140px]">
+              <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-1">Attendance</p>
+              <h4 className="text-3xl font-black">{stats?.percentage || 0}%</h4>
+              <p className="text-[9px] text-white/40 font-bold uppercase mt-1">{stats?.attended} of {stats?.total} events</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 min-w-[140px]">
+              <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-1">Solo Credits</p>
+              <h4 className="text-3xl font-black">{member.is_soloist ? 'Active' : 'M-Member'}</h4>
+              <p className="text-[9px] text-white/40 font-bold uppercase mt-1">Status Summary</p>
+            </div>
+          </div>
+        </div>
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-400/20 rounded-full blur-3xl -ml-24 -mb-24" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* New Attendance Check-in Card */}
+        <div className="bg-white dark:bg-[#131521] rounded-[3rem] p-10 border-4 border-indigo-600/20 dark:border-indigo-500/10 space-y-6 shadow-2xl shadow-indigo-500/10">
+          <div className="flex items-center gap-4 mb-2">
+            <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+              <CalendarCheck size={24} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Live Check-in</h3>
+              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Enter rehearsal code</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleCheckIn} className="space-y-4">
+            <div className="relative">
+              <input
+                type="text"
+                value={code}
+                onChange={e => setCode(e.target.value.toUpperCase())}
+                placeholder="0000"
+                maxLength={6}
+                className="w-full bg-slate-50 dark:bg-[#0b0d17] border-2 border-slate-200 dark:border-white/5 rounded-2xl px-6 py-5 text-2xl font-black tracking-[0.5em] text-center focus:border-indigo-600 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-white/5"
+              />
+              {loading && (
+                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                  <Loader2 className="animate-spin text-indigo-600" size={20} />
+                </div>
+              )}
+            </div>
+
+            {message && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className={cn(
+                  "p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border",
+                  message.type === 'success'
+                    ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                    : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                )}
+              >
+                {message.text}
+              </motion.div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || code.length < 4}
+              className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-xl shadow-indigo-500/20 hover:scale-[1.02] active:scale-98 transition-all disabled:opacity-50"
+            >
+              Confirm Check-in
+            </button>
+          </form>
+        </div>
+
+        <div className="bg-white dark:bg-[#131521] rounded-[3rem] p-10 border border-slate-200 dark:border-white/5 space-y-6">
+          <div className="flex items-center gap-4 mb-2">
+            <div className="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center">
+              <Trophy size={24} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Recent Progress</h3>
+              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Your activities</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
+              <div className="w-10 h-10 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center">
+                <CheckSquare size={18} />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-bold text-slate-900 dark:text-white">Attendance Stability</p>
+                <p className="text-[10px] text-slate-500">You have been present at the last 3 rehearsals</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
+              <div className="w-10 h-10 bg-indigo-500/10 text-indigo-500 rounded-xl flex items-center justify-center">
+                <Music size={18} />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-bold text-slate-900 dark:text-white">Solo Application</p>
+                <p className="text-[10px] text-slate-500">{member.is_soloist ? 'Assigned to slot' : 'Register for upcoming soloist slots'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-[#131521] rounded-[3rem] p-10 border border-slate-200 dark:border-white/5 space-y-6 lg:col-span-2">
+          <div className="flex items-center gap-4 mb-2">
+            <div className="w-12 h-12 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center">
+              <ExternalLink size={24} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Quick Actions</h3>
+              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Jump to</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Link to="/members" className="p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5 hover:border-indigo-500/50 transition-all group">
+              <Users size={20} className="mb-3 text-indigo-500" />
+              <p className="text-xs font-black uppercase tracking-widest group-hover:text-indigo-500 transition-colors">Directory</p>
+            </Link>
+            <Link to="/status" className="p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5 hover:border-indigo-500/50 transition-all group">
+              <Monitor size={20} className="mb-3 text-indigo-500" />
+              <p className="text-xs font-black uppercase tracking-widest group-hover:text-indigo-500 transition-colors">Solo Wall</p>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortalHistory({ memberId }: { memberId: string }) {
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getMemberHistory(memberId).then(setHistory).finally(() => setLoading(false));
+  }, [memberId]);
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-indigo-500" size={32} /></div>;
+
+  return (
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">Performance History</h2>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Every solo and rehearsal credit</p>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-[#131521] rounded-[3rem] border border-slate-200 dark:border-white/5 overflow-hidden shadow-xl">
+        <table className="w-full text-left">
+          <thead className="bg-slate-50 dark:bg-[#0b0d17] border-b border-slate-200 dark:border-white/5">
+            <tr>
+              <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Date / event</th>
+              <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Solo Details</th>
+              <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-right text-slate-400">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+            {history.length > 0 ? history.map((h: any) => (
+              <tr key={h.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                <td className="px-10 py-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
+                      <Music size={18} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">Week {new Date(h.created_at).toLocaleDateString()}</p>
+                      <p className="text-[10px] text-slate-500 uppercase font-black">Slot S-{h.slot_id}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-10 py-6">
+                  {h.repertoire_submissions?.map((rep: any) => (
+                    <div key={rep.id} className="space-y-1">
+                      <p className="text-xs font-black text-slate-800 dark:text-slate-200">{rep.song_title}</p>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest">{rep.artist_composer}</p>
+                    </div>
+                  )) || <span className="text-xs italic text-slate-400">No songs recorded</span>}
+                </td>
+                <td className="px-10 py-6 text-right">
+                  <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                    Completed
+                  </span>
+                </td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={3} className="px-10 py-20 text-center">
+                  <div className="max-w-xs mx-auto space-y-4">
+                    <History size={48} className="mx-auto text-slate-200 dark:text-white/10" />
+                    <p className="text-xs text-slate-500 font-black uppercase tracking-widest">No history recorded yet</p>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function PortalProfileEditor({ member, onUpdate }: any) {
+  const [form, setForm] = useState(member);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const publicUrl = await uploadMemberPhoto(file);
+      setForm((prev: any) => ({ ...prev, photo_url: publicUrl }));
+      // Automatically save the photo update
+      const data = await updateMember(member.id, { photo_url: publicUrl });
+      onUpdate(data[0]);
+    } catch (err) {
+      console.error("Photo upload failed:", err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const data = await updateMember(member.id, form);
+      onUpdate(data[0]);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">Manage Profile</h2>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Keep your information up to date</p>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-[#131521] rounded-[3rem] p-10 border border-slate-200 dark:border-white/5 space-y-10 shadow-xl shadow-indigo-500/5">
+        {/* Header: Photo + Name */}
+        <div className="flex flex-col sm:flex-row gap-8 items-center sm:items-start">
+          <div className="relative group shrink-0">
+            <div className="w-36 h-36 rounded-[2.5rem] overflow-hidden bg-slate-100 dark:bg-[#0b0d17] border-4 border-indigo-600/20 relative shadow-2xl">
+              <img
+                src={form.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(member.full_name)}`}
+                className="w-full h-full object-cover"
+                alt="Profile"
+              />
+              {uploading && (
+                <div className="absolute inset-0 bg-white/80 dark:bg-[#0b0d17]/80 backdrop-blur-sm flex items-center justify-center">
+                  <Loader2 className="animate-spin text-indigo-600" size={28} />
+                </div>
+              )}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute inset-0 bg-indigo-600/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white backdrop-blur-sm cursor-pointer"
+              >
+                <Camera size={26} className="mb-1" />
+                <span className="text-[9px] font-black uppercase tracking-widest">Change</span>
+              </button>
+            </div>
+            <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} accept="image/*" className="hidden" />
+          </div>
+          <div className="flex-1 space-y-3 text-center sm:text-left">
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white">{form.full_name}</h3>
+            <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+              <span className="px-3 py-1 bg-indigo-500/10 text-indigo-500 rounded-lg text-[10px] font-black uppercase tracking-widest">{form.voice_part}</span>
+              {form.is_soloist && <span className="px-3 py-1 bg-amber-500/10 text-amber-500 rounded-lg text-[10px] font-black uppercase tracking-widest">Soloist</span>}
+              {form.is_on_probation && <span className="px-3 py-1 bg-rose-500/10 text-rose-500 rounded-lg text-[10px] font-black uppercase tracking-widest">On Probation</span>}
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">Hover your photo to update it. Voice part requires admin to change.</p>
+          </div>
+        </div>
+
+        {/* Section 1: Personal Information */}
+        <div className="space-y-5 pt-8 border-t border-slate-100 dark:border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0">
+              <User size={15} className="text-indigo-500" />
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-indigo-500">Personal Information</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Full Name</label>
+              <input
+                value={form.full_name || ''}
+                onChange={e => setForm({ ...form, full_name: e.target.value })}
+                className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-5 py-4 text-sm focus:border-indigo-600 outline-none transition-all"
+                placeholder="Your full name"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">
+                Voice Part <span className="text-slate-300 dark:text-white/20 normal-case font-normal tracking-normal text-[9px]">(Admin only)</span>
+              </label>
+              <input
+                value={form.voice_part || ''}
+                readOnly
+                className="w-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5 rounded-2xl px-5 py-4 text-sm outline-none cursor-not-allowed opacity-60"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Biography</label>
+              <textarea
+                value={form.bio || ''}
+                onChange={e => setForm({ ...form, bio: e.target.value })}
+                rows={4}
+                className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-5 py-4 text-sm focus:border-indigo-600 outline-none transition-all resize-none"
+                placeholder="Share your musical journey, background, and what you love about singing..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2: Contact Details */}
+        <div className="space-y-5 pt-8 border-t border-slate-100 dark:border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+              <Mail size={15} className="text-emerald-500" />
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-500">Contact Details</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Phone Number</label>
+              <div className="relative">
+                <PhoneIcon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={form.phone || ''}
+                  onChange={e => setForm({ ...form, phone: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-11 pr-5 py-4 text-sm focus:border-indigo-600 outline-none transition-all"
+                  placeholder="+1 234 567 8900"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Email Address</label>
+              <div className="relative">
+                <Mail size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={form.email || ''}
+                  onChange={e => setForm({ ...form, email: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-11 pr-5 py-4 text-sm focus:border-indigo-600 outline-none transition-all"
+                  placeholder="you@example.com"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 3: Social Presence */}
+        <div className="space-y-5 pt-8 border-t border-slate-100 dark:border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-pink-500/10 flex items-center justify-center shrink-0">
+              <Share2 size={15} className="text-pink-500" />
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-pink-500">Social Presence</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {([
+              { label: 'Instagram', key: 'instagram', icon: Instagram, color: 'text-pink-500', bg: 'bg-pink-500/10', placeholder: '@your_handle' },
+              { label: 'YouTube', key: 'youtube', icon: Youtube, color: 'text-rose-500', bg: 'bg-rose-500/10', placeholder: 'Channel URL or handle' },
+              { label: 'Facebook', key: 'facebook', icon: Facebook, color: 'text-blue-600', bg: 'bg-blue-600/10', placeholder: 'Profile URL or name' },
+              { label: 'Twitter / X', key: 'twitter', icon: Twitter, color: 'text-sky-500', bg: 'bg-sky-500/10', placeholder: '@your_handle' },
+              { label: 'TikTok', key: 'tiktok', icon: Video, color: 'text-teal-500', bg: 'bg-teal-500/10', placeholder: '@your_tiktok' },
+            ] as const).map(item => (
+              <div key={item.key}>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">{item.label}</label>
+                <div className="relative">
+                  <div className={cn("absolute left-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center", item.bg)}>
+                    <item.icon size={14} className={item.color} />
+                  </div>
+                  <input
+                    value={(form as any)[item.key] || ''}
+                    onChange={e => setForm({ ...form, [item.key]: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-14 pr-5 py-4 text-sm focus:border-indigo-600 outline-none transition-all"
+                    placeholder={item.placeholder}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Save Footer */}
+        <div className="pt-10 border-t border-slate-100 dark:border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div>
+            <AnimatePresence>
+              {success && (
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20"
+                >
+                  <Check size={14} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Profile Updated!</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full md:w-auto px-12 py-5 bg-indigo-600 text-white rounded-[2rem] font-black uppercase tracking-[0.2em] text-xs shadow-2xl shadow-indigo-500/20 hover:scale-[1.05] active:scale-95 transition-all inline-flex items-center justify-center gap-3 disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+            Push Updates
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('is-admin-authenticated') === 'true';
   });
+  const [portalMember, setPortalMember] = useState<any>(() => {
+    const saved = localStorage.getItem('portal-member');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    const handleError = (e: ErrorEvent) => {
+    const handleError = (e: any) => {
       console.error("Global crash caught:", e.error);
       setHasError(true);
     };
@@ -4438,8 +5607,18 @@ export default function App() {
     localStorage.removeItem('is-admin-authenticated');
   };
 
+  const handlePortalLogin = (member: any) => {
+    setPortalMember(member);
+    localStorage.setItem('portal-member', JSON.stringify(member));
+  };
+
+  const handlePortalLogout = () => {
+    setPortalMember(null);
+    localStorage.removeItem('portal-member');
+  };
+
   if (!isSupabaseConfigured) {
-    return <PublicView />;
+    return <PublicView setConfirmModal={() => { }} />;
   }
 
   const [confirmModal, setConfirmModal] = useState<{
@@ -4465,13 +5644,14 @@ export default function App() {
           element={isAuthenticated ? <AdminView onLogout={handleLogout} confirmModal={confirmModal} setConfirmModal={setConfirmModal} /> : <Navigate to="/login" replace />}
         />
         <Route path="/login" element={<LoginView onLogin={handleLogin} />} />
+        <Route path="/portal" element={<MemberPortalView member={portalMember} onLogin={handlePortalLogin} onLogout={handlePortalLogout} setConfirmModal={setConfirmModal} />} />
         <Route path="/" element={<RosterView />} />
         <Route path="/repertoire" element={<SongEntryView setConfirmModal={setConfirmModal} />} />
       </Routes>
       <AnimatePresence>
         <ConfirmModal
           isOpen={confirmModal.isOpen}
-          onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          onClose={() => setConfirmModal((prev: any) => ({ ...prev, isOpen: false }))}
           onConfirm={confirmModal.onConfirm}
           title={confirmModal.title}
           message={confirmModal.message}

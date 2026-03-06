@@ -361,6 +361,20 @@ export const deleteMember = async (id: string) => {
     if (error) throw error;
 };
 
+export const getMemberByPortalId = async (portalId: string) => {
+    const { data, error } = await supabase
+        .from('members')
+        .select('*')
+        .eq('portal_id', portalId)
+        .single();
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+};
+
+export const updateMemberPin = async (id: string, pin: string) => {
+    return updateMember(id, { portal_pin: pin });
+};
+
 export const uploadMemberPhoto = async (file: File) => {
     if (!supabase) throw new Error("Supabase not configured");
 
@@ -449,4 +463,128 @@ export const getMemberHistory = async (memberId: string) => {
 
     if (histErr) throw histErr;
     return history || [];
+};
+
+// --- Attendance System (Phase 10) ---
+
+export const getAttendanceEvents = async () => {
+    const { data, error } = await supabase
+        .from('attendance_events')
+        .select('*')
+        .order('date', { ascending: false })
+        .order('start_time', { ascending: false });
+    if (error) throw error;
+    return data || [];
+};
+
+export const createAttendanceEvent = async (event: any) => {
+    const { data, error } = await supabase
+        .from('attendance_events')
+        .insert([event])
+        .select();
+    if (error) throw error;
+    return data;
+};
+
+export const updateAttendanceEvent = async (id: string, updates: any) => {
+    const { data, error } = await supabase
+        .from('attendance_events')
+        .update(updates)
+        .eq('id', id)
+        .select();
+    if (error) throw error;
+    return data;
+};
+
+export const deleteAttendanceEvent = async (id: string) => {
+    const { error } = await supabase
+        .from('attendance_events')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+};
+
+export const getAttendanceRecords = async (eventId: string) => {
+    const { data, error } = await supabase
+        .from('attendance_records')
+        .select(`
+            *,
+            members (
+                full_name,
+                voice_part
+            )
+        `)
+        .eq('event_id', eventId);
+    if (error) throw error;
+    return data || [];
+};
+
+export const markAttendance = async (eventId: string, memberId: string, metadata: any = {}) => {
+    const { data, error } = await supabase
+        .from('attendance_records')
+        .insert([{
+            event_id: eventId,
+            member_id: memberId,
+            metadata
+        }])
+        .select();
+    if (error) throw error;
+    return data;
+};
+
+export const getMemberAttendanceStats = async (memberId: string) => {
+    const { data: events, error: errEvents } = await supabase
+        .from('attendance_events')
+        .select('id')
+        .eq('is_active', true);
+
+    if (errEvents) throw errEvents;
+
+    const { data: records, error: errRecords } = await supabase
+        .from('attendance_records')
+        .select('event_id')
+        .eq('member_id', memberId);
+
+    if (errRecords) throw errRecords;
+
+    const total = events?.length || 0;
+    const attended = records?.length || 0;
+    const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
+
+    return { attended, total, percentage };
+};
+
+export const validateAndCheckIn = async (memberId: string, code: string) => {
+    // 1. Find active events
+    const { data: activeEvents, error: eventErr } = await supabase
+        .from('attendance_events')
+        .select('*')
+        .eq('is_active', true);
+
+    if (eventErr) throw eventErr;
+    if (!activeEvents || activeEvents.length === 0) {
+        throw new Error('No active attendance events found.');
+    }
+
+    // 2. Find matching event by code (case insensitive or exact depending on preference, usually exact for codes)
+    const matchingEvent = activeEvents.find((e: any) => e.check_in_code.toUpperCase() === code.toUpperCase());
+
+    if (!matchingEvent) {
+        throw new Error('Invalid check-in code.');
+    }
+
+    // 3. Check if already checked in
+    const { data: existing, error: _checkErr } = await supabase
+        .from('attendance_records')
+        .select('id')
+        .eq('event_id', matchingEvent.id)
+        .eq('member_id', memberId)
+        .single();
+
+    if (existing) {
+        throw new Error('You have already checked in for this event.');
+    }
+
+    // 4. Mark attendance
+    return markAttendance(matchingEvent.id, memberId, { source: 'member_portal', timestamp: new Date().toISOString() });
 };

@@ -162,6 +162,8 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS instagram TEXT;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS facebook TEXT;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS twitter TEXT;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS tiktok TEXT;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS portal_id TEXT UNIQUE;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS portal_pin TEXT;
 
 -- 13. Config Updates
 INSERT INTO config (key, value)
@@ -191,3 +193,46 @@ CREATE POLICY "Admin all members" ON members FOR ALL USING (true);
 -- Policies for public updating/deleting
 -- CREATE POLICY "Public Update" ON storage.objects FOR UPDATE USING ( bucket_id = 'member-profiles' );
 -- CREATE POLICY "Public Delete" ON storage.objects FOR DELETE USING ( bucket_id = 'member-profiles' );
+
+-- 14. Attendance System
+CREATE TABLE IF NOT EXISTS attendance_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  type TEXT CHECK (type IN ('rehearsal', 'concert', 'other')) DEFAULT 'rehearsal',
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  start_time TIME NOT NULL,
+  duration_minutes INTEGER DEFAULT 60,
+  check_in_code TEXT NOT NULL,
+  lat DECIMAL,
+  lng DECIMAL,
+  radius_meters INTEGER DEFAULT 100,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS attendance_records (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id UUID REFERENCES attendance_events(id) ON DELETE CASCADE,
+  member_id UUID REFERENCES members(id) ON DELETE CASCADE,
+  check_in_time TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  metadata JSONB DEFAULT '{}'::jsonb,
+  UNIQUE(event_id, member_id)
+);
+
+ALTER TABLE attendance_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attendance_records ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read attendance_events" ON attendance_events;
+CREATE POLICY "Public read attendance_events" ON attendance_events FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admin manage attendance_events" ON attendance_events;
+CREATE POLICY "Admin manage attendance_events" ON attendance_events FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public read attendance_records" ON attendance_records;
+CREATE POLICY "Public read attendance_records" ON attendance_records FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public insert attendance_records" ON attendance_records;
+CREATE POLICY "Public insert attendance_records" ON attendance_records FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admin manage attendance_records" ON attendance_records;
+CREATE POLICY "Admin manage attendance_records" ON attendance_records FOR ALL USING (true);
