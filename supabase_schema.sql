@@ -7,6 +7,7 @@
 -- 1. Update Existing Tables (Add columns safely)
 ALTER TABLE registrations ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT false;
 ALTER TABLE registrations ADD COLUMN IF NOT EXISTS performance_status TEXT DEFAULT 'pending';
+ALTER TABLE registrations ADD COLUMN IF NOT EXISTS md_comments TEXT;
 ALTER TABLE repertoire_submissions ADD COLUMN IF NOT EXISTS admin_comments TEXT;
 
 -- 2. Create New Tables (If not already present)

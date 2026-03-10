@@ -65,10 +65,15 @@ export const deleteRegistration = async (id: string) => {
     return data;
 };
 
-export const updatePerformanceStatus = async (id: string, status: string) => {
+export const updatePerformanceStatus = async (id: string, status: string, md_comments?: string) => {
+    const payload: any = { performance_status: status };
+    if (md_comments !== undefined) {
+        payload.md_comments = md_comments;
+    }
+
     const { data, error } = await supabase
         .from('registrations')
-        .update({ performance_status: status })
+        .update(payload)
         .eq('id', id)
         .select();
 
@@ -375,6 +380,16 @@ export const updateMemberPin = async (id: string, pin: string) => {
     return updateMember(id, { portal_pin: pin });
 };
 
+export const bulkInsertMembers = async (membersToInsert: any[]) => {
+    const { data, error } = await supabase
+        .from('members')
+        .insert(membersToInsert)
+        .select();
+
+    if (error) throw error;
+    return data;
+};
+
 export const uploadMemberPhoto = async (file: File) => {
     if (!supabase) throw new Error("Supabase not configured");
 
@@ -462,7 +477,34 @@ export const getMemberHistory = async (memberId: string) => {
         .order('created_at', { ascending: false });
 
     if (histErr) throw histErr;
-    return history || [];
+
+    // Fetch weeks to map the slot_id to actual performance date
+    const { data: weeks } = await supabase.from('performance_weeks').select('*');
+
+    const mappedHistory = (history || []).map((reg: any) => {
+        let perfDate = 'Unknown Date';
+        if (weeks && reg.slot_id) {
+            const week = weeks.find((w: any) => w.slot_ids?.includes(reg.slot_id));
+            if (week && week.date) {
+                try {
+                    const parts = week.date.split('-');
+                    if (parts.length === 3) {
+                        perfDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                    } else {
+                        perfDate = week.date;
+                    }
+                } catch (e) {
+                    perfDate = week.date;
+                }
+            }
+        }
+        return {
+            ...reg,
+            performance_date: perfDate !== 'Unknown Date' ? perfDate : new Date(reg.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+        };
+    });
+
+    return mappedHistory;
 };
 
 // --- Attendance System (Phase 10) ---
@@ -557,6 +599,14 @@ export const getMemberAttendanceStats = async (memberId: string) => {
     const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
 
     return { attended, total, percentage };
+};
+
+export const calculateHonorarium = (attendancePercentage: number): number => {
+    if (attendancePercentage >= 80) return 100;
+    if (attendancePercentage >= 60) return 80;
+    if (attendancePercentage >= 50) return 70;
+    if (attendancePercentage >= 40) return 50;
+    return 0;
 };
 
 export const autoExpireEvents = async () => {

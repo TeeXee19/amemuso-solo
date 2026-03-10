@@ -9,13 +9,13 @@ import {
   getWaitlist, joinWaitlist, deleteWaitlistEntry, getAdminUser,
   getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers, uploadMemberPhoto, getMemberByPortalId,
   getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory,
-  getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, getMemberAttendanceStats, validateAndCheckIn, autoExpireEvents
+  getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, getMemberAttendanceStats, validateAndCheckIn, autoExpireEvents, calculateHonorarium
 } from './lib/db';
 import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
   Users, Trash2, Loader2, X, Check, Music, Sun, Monitor, Moon, Edit2, Plus, Camera,
   Calendar, Briefcase, History, Archive, Youtube, Instagram, Facebook, Twitter, Video, CalendarCheck,
-  LogOut, CheckSquare, Lock, Trophy, User, ShieldCheck, ShieldAlert, Share2, Mail, Phone as PhoneIcon, Save, MapPin
+  LogOut, CheckSquare, Lock, Trophy, User, ShieldCheck, ShieldAlert, Share2, Mail, Phone as PhoneIcon, Save, MapPin, Upload, AlertCircle, MessageSquareHeart, Edit3
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -624,6 +624,246 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
   );
 }
 
+function ImportMembersModal({ isOpen, onClose, onRefresh, setConfirmModal }: any) {
+  const [file, setFile] = useState<File | null>(null);
+  const [parsedData, setParsedData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Native CSV Parser
+  const parseCSV = (text: string) => {
+    const lines = text.split('\n').filter(line => line.trim() !== '');
+    if (lines.length < 2) return [];
+
+    // Simple CSV split
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      const currentline = lines[i].split(',');
+      if (currentline.length < headers.length) continue;
+
+      const obj: any = {};
+      for (let j = 0; j < headers.length; j++) {
+        let val = (currentline[j] || '').trim();
+        if (val.startsWith('"') && val.endsWith('"')) {
+          val = val.substring(1, val.length - 1);
+        }
+
+        if (headers[j] === 'full_name' || headers[j] === 'name') obj.full_name = val;
+        if (headers[j] === 'email_address' || headers[j] === 'email') obj.email = val;
+        if (headers[j] === 'phone_number' || headers[j] === 'phone') obj.phone = val;
+        if (headers[j] === 'voice_part' || headers[j] === 'voice') obj.voice_part = val || 'Soprano';
+        if (headers[j] === 'is_soloist') obj.is_soloist = (val.toLowerCase() === 'true' || val === '1' || val.toLowerCase() === 'yes');
+        if (headers[j] === 'probation_status') obj.is_on_probation = (val.toLowerCase() === 'true' || val === '1' || val.toLowerCase() === 'yes');
+        if (headers[j] === 'joined_at') {
+          const d = new Date(val);
+          obj.joined_at = isNaN(d.getTime()) ? new Date().toISOString().split('T')[0] : d.toISOString().split('T')[0];
+        }
+      }
+
+      if (obj.full_name) {
+        if (!obj.joined_at) obj.joined_at = new Date().toISOString().split('T')[0];
+        if (!obj.voice_part) obj.voice_part = 'Soprano';
+        rows.push(obj);
+      }
+    }
+    return rows;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError('');
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    if (!selectedFile.name.endsWith('.csv')) {
+      setError('Please select a valid .csv file.');
+      return;
+    }
+
+    setFile(selectedFile);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const data = parseCSV(text);
+        if (data.length === 0) {
+          setError("No valid member records found in the CSV. Make sure headers are correct (e.g. 'full_name').");
+        } else {
+          setParsedData(data);
+        }
+      } catch (err) {
+        setError('Error parsing CSV file. Ensure it is properly formatted.');
+      }
+    };
+    reader.onerror = () => setError('Failed to read file.');
+    reader.readAsText(selectedFile);
+  };
+
+  const handleImport = async () => {
+    if (parsedData.length === 0) return;
+    setLoading(true);
+    setError('');
+
+    try {
+      const { bulkInsertMembers } = await import('./lib/db');
+      await bulkInsertMembers(parsedData);
+
+      setConfirmModal({
+        isOpen: true,
+        title: "Import Successful",
+        message: `Successfully imported ${parsedData.length} members.`,
+        icon: Check,
+        confirmText: "Awesome!",
+        color: "bg-emerald-600",
+        hideCancel: true,
+        onConfirm: () => {
+          onRefresh();
+          handleClose();
+        }
+      });
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to import members to the database.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClose = () => {
+    setFile(null);
+    setParsedData([]);
+    setError('');
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="w-full max-w-4xl bg-white dark:bg-[#131521] rounded-[2.5rem] shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col max-h-[90vh]"
+      >
+        <div className="p-8 pb-4 shrink-0 border-b border-slate-200 dark:border-white/5">
+          <div className="flex justify-between items-center">
+            <div className="space-y-1">
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight leading-none">
+                Bulk CSV Import
+              </h3>
+              <p className="text-[10px] text-slate-500 font-bold tracking-widest uppercase opacity-70">
+                Upload a CSV to quickly add multiple members
+              </p>
+            </div>
+            <button onClick={handleClose} disabled={loading} className="p-3 hover:bg-slate-100 dark:hover:bg-white/5 rounded-2xl transition-all text-slate-500 hover:text-rose-500 disabled:opacity-50">
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-8 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+          {!file ? (
+            <div className="border-2 border-dashed border-slate-300 dark:border-white/10 rounded-[2rem] p-12 text-center hover:bg-slate-50 dark:hover:bg-white/5 transition-colors relative cursor-pointer">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+              <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Upload size={32} />
+              </div>
+              <h4 className="text-lg font-black text-slate-900 dark:text-white">Click or drop CSV file here</h4>
+              <p className="text-xs text-slate-500 font-bold mt-2">Required column: <span className="text-indigo-500">full_name</span></p>
+              <p className="text-[10px] text-slate-400 mt-1">Optional: email, phone, voice, joined_at, is_soloist, probation_status</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-500/10 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-500/20">
+                <div className="flex items-center gap-3 text-indigo-700 dark:text-indigo-400">
+                  <Check size={20} />
+                  <div>
+                    <p className="text-sm font-bold">{file.name}</p>
+                    <p className="text-[10px] uppercase tracking-widest font-black opacity-70">{parsedData.length} records parsed</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleClose}
+                  disabled={loading}
+                  className="text-xs font-bold text-slate-500 hover:text-rose-500 underline disabled:opacity-50"
+                >
+                  Change File
+                </button>
+              </div>
+
+              {parsedData.length > 0 && (
+                <div className="border border-slate-200 dark:border-white/5 rounded-2xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-[#0b0d17] border-b border-slate-200 dark:border-white/5 font-black uppercase tracking-widest text-[9px] text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Name</th>
+                        <th className="px-4 py-3">Voice</th>
+                        <th className="px-4 py-3">Contact</th>
+                        <th className="px-4 py-3">Joined</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                      {parsedData.slice(0, 10).map((row, i) => (
+                        <tr key={i} className="bg-white dark:bg-[#131521]">
+                          <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">{row.full_name}</td>
+                          <td className="px-4 py-3">
+                            <span className="text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-1 rounded w-fit font-bold">{row.voice_part || 'Soprano'}</span>
+                          </td>
+                          <td className="px-4 py-3 text-[10px] text-slate-500">
+                            {row.email || row.phone || 'N/A'}
+                          </td>
+                          <td className="px-4 py-3 text-slate-500">{row.joined_at}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {parsedData.length > 10 && (
+                    <div className="p-3 text-center bg-slate-50 dark:bg-[#0b0d17] text-[10px] font-black uppercase text-slate-500 tracking-widest border-t border-slate-200 dark:border-white/5">
+                      + {parsedData.length - 10} more rows
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-500 text-xs font-bold flex gap-3">
+              <ShieldAlert size={16} className="shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="p-8 pt-4 shrink-0 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17] flex justify-end gap-3">
+          <button
+            onClick={handleClose}
+            disabled={loading}
+            className="px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-white/5 transition-all text-slate-500 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleImport}
+            disabled={loading || parsedData.length === 0}
+            className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-xl shadow-indigo-500/20 disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            Import {parsedData.length > 0 ? parsedData.length : ''} Members
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function AdminSidebar({ activeTab, setActiveTab, repertoires, waitlist, onLogout }: any) {
   const menuItems = [
     { id: 'list', label: 'Member List', icon: Users },
@@ -634,6 +874,7 @@ function AdminSidebar({ activeTab, setActiveTab, repertoires, waitlist, onLogout
     { id: 'waitlist', label: 'Waitlist', icon: History, badge: waitlist.length },
     { id: 'analytics', label: 'Analytics', icon: Activity },
     { id: 'live', label: 'Stage Mode', icon: Monitor },
+    { id: 'history', label: 'Completed Solos', icon: MessageSquareHeart },
     { id: 'archives', label: 'Archives', icon: Archive },
     { id: 'settings', label: 'App Settings', icon: Settings },
   ];
@@ -733,7 +974,7 @@ function Layout({ children, subtitle, isAuthenticated, onLogout, sidebar }: any)
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/40 group-hover:scale-105 transition-transform">
               <Music className="text-slate-900 dark:text-white" size={20} />
             </div>
-            <h1 className="text-md md:text-2xl font-black tracking-tight text-slate-900 dark:text-white uppercase italic">AMEMUSO COMPULSORY Solo</h1>
+            <h1 className="text-md md:text-2xl font-black tracking-tight text-slate-900 dark:text-white uppercase italic">AMEMUSO COMPULSORY RECITAL</h1>
           </Link>
         </div>
 
@@ -1873,7 +2114,7 @@ function MemberProfileModal({ member, isOpen, onClose, setConfirmModal, isAdmin 
           </div>
 
 
-          <MemberHistoryView memberId={member.id} />
+          <MemberHistoryView memberId={member.id} isAdmin={isAdmin} />
 
           {member.is_soloist && member.registrations && (
             <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl flex items-center justify-between">
@@ -1900,57 +2141,106 @@ function MemberProfileModal({ member, isOpen, onClose, setConfirmModal, isAdmin 
   );
 }
 
-function MemberHistoryView({ memberId }: { memberId: string }) {
+function MemberHistoryView({ memberId, isAdmin = false }: { memberId: string, isAdmin?: boolean }) {
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [attendance, setAttendance] = useState<{ attended: number, total: number, percentage: number } | null>(null);
 
   useEffect(() => {
-    const fetchHistory = async () => {
+    const fetchHistoryAndStats = async () => {
       try {
-        const data = await getMemberHistory(memberId);
-        setHistory(data);
+        const [historyData, statsData] = await Promise.all([
+          getMemberHistory(memberId),
+          getMemberAttendanceStats(memberId)
+        ]);
+        setHistory(historyData);
+        setAttendance(statsData);
       } catch (err) {
         console.error(err);
       } finally {
         setLoading(false);
       }
     };
-    fetchHistory();
+    fetchHistoryAndStats();
   }, [memberId]);
 
   if (loading) return <div className="flex justify-center p-4"><Loader2 className="animate-spin text-indigo-500" size={20} /></div>;
-  if (history.length === 0) return (
-    <div className="p-4 bg-slate-50 dark:bg-black/20 rounded-2xl text-center border border-dashed border-slate-200 dark:border-white/5">
-      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">No Soloist History Found</p>
-    </div>
-  );
+
+  // Honorarium calc is shielded by isAdmin check in UI below
+  const honorariumPct = attendance ? calculateHonorarium(attendance.percentage) : 0;
 
   return (
-    <div className="space-y-3">
-      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-        <History size={12} /> Performance History
-      </h4>
-      <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-        {history.map((reg) => (
-          <div key={reg.id} className="p-3 bg-white dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl flex justify-between items-center group hover:border-indigo-500/30 transition-all">
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                {reg.repertoire_submissions?.[0]?.song_title || 'TBD'}
-              </p>
-              <p className="text-[9px] text-slate-500 font-medium">
-                {new Date(reg.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • Slot S-{reg.slot_id}
-              </p>
+    <div className="space-y-6">
+      {isAdmin && (
+        <div className="p-5 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-2xl">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-500">
+              <Activity size={16} />
             </div>
-            <div className="shrink-0 text-right">
-              <span className={cn(
-                "px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border",
-                reg.performance_status === 'completed' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
-              )}>
-                {reg.performance_status}
-              </span>
+            <div>
+              <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Financial & Attendance</h4>
+              <p className="text-[10px] uppercase tracking-widest text-slate-500 dark:text-slate-400 font-bold">Current Standing</p>
             </div>
           </div>
-        ))}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white dark:bg-[#131521] p-4 rounded-xl shadow-sm border border-slate-200 dark:border-white/5">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Attendance</p>
+              <div className="flex items-end gap-2">
+                <span className="text-2xl font-black text-slate-900 dark:text-white leading-none">{attendance?.percentage || 0}%</span>
+                <span className="text-xs font-bold text-slate-500 pb-0.5">{attendance?.attended}/{attendance?.total}</span>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-[#131521] p-4 rounded-xl shadow-sm border border-slate-200 dark:border-white/5">
+              <div className="flex items-center gap-1.5 mb-1">
+                <LogOut className="text-emerald-500 rotate-90" size={12} strokeWidth={3} />
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">Honorarium</p>
+              </div>
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 leading-none">{honorariumPct}%</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 ml-2">Soloist History</h4>
+        {history.length === 0 ? (
+          <div className="p-4 bg-slate-50 dark:bg-black/20 rounded-2xl text-center border border-dashed border-slate-200 dark:border-white/5">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">No Soloist History Found</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {history.map((reg) => (
+              <div key={reg.id} className="p-3 bg-white dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl flex flex-col gap-3 group hover:border-indigo-500/30 transition-all">
+                <div className="flex justify-between items-start sm:items-center">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {reg.repertoire_submissions?.[0]?.song_title || 'TBD'}
+                    </p>
+                    <p className="text-[9px] text-slate-500 font-medium">
+                      {reg.performance_date || new Date(reg.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • Slot S-{reg.slot_id}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <span className={cn(
+                      "px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest border",
+                      reg.performance_status === 'completed' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                    )}>
+                      {reg.performance_status}
+                    </span>
+                  </div>
+                </div>
+
+                {reg.md_comments && (
+                  <div className="p-3 bg-slate-50 dark:bg-white/5 rounded-lg border border-slate-100 dark:border-white/5">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-indigo-500 mb-1">MD Feedback / Notes</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 italic leading-relaxed whitespace-pre-wrap">{reg.md_comments}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2211,13 +2501,14 @@ function AnalyticsView({ registrations, repertoires }: { registrations: any[], r
 function LiveModeView({ registrations, performanceWeeks, onUpdateStatus, onResetStatus, setConfirmModal }: {
   registrations: any[],
   performanceWeeks: any[],
-  onUpdateStatus: (id: string, status: string) => Promise<void>,
+  onUpdateStatus: (id: string, status: string, md_comments?: string) => Promise<void>,
   onResetStatus: () => Promise<void>,
   setConfirmModal: any
 }) {
   const [loading, setLoading] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [selectedWeekId, setSelectedWeekId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState('');
 
   const selectedWeek = performanceWeeks.find(w => w.id === selectedWeekId);
 
@@ -2236,7 +2527,8 @@ function LiveModeView({ registrations, performanceWeeks, onUpdateStatus, onReset
 
   const handleStatus = async (id: string, status: string) => {
     setLoading(id);
-    await onUpdateStatus(id, status);
+    await onUpdateStatus(id, status, feedback);
+    setFeedback(''); // clear for the next performer
     setLoading(null);
   }
 
@@ -2359,7 +2651,18 @@ function LiveModeView({ registrations, performanceWeeks, onUpdateStatus, onReset
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-6 w-full max-w-lg">
+                  <div className="w-full max-w-lg mt-8 text-left">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-2 block ml-2">MD Notes & Feedback (Optional)</label>
+                    <textarea
+                      value={feedback}
+                      onChange={e => setFeedback(e.target.value)}
+                      placeholder="e.g. Needs better breath support; great expression... (visible to member)"
+                      className="w-full bg-slate-900/50 border border-white/10 rounded-2xl p-4 text-white text-sm focus:border-indigo-400 focus:bg-slate-900 outline-none resize-none transition-all placeholder:text-white/20"
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-6 w-full max-w-lg mt-4">
                     <button
                       onClick={() => handleStatus(current.id, 'completed')}
                       disabled={!!loading}
@@ -2956,6 +3259,218 @@ function AttendanceManagement({ events, fetchData, setConfirmModal }: any) {
   );
 }
 
+// --- Completed Solos MD View ---
+
+function CompletedSolosView({ registrations, performanceWeeks, fetchData, setConfirmModal }: any) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [voicePartFilter, setVoicePartFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
+  const getPerfDate = (slotId: number) => {
+    const week = performanceWeeks?.find((w: any) => w.slot_ids?.includes(slotId));
+    if (week && week.date) {
+      // Return formatted date if possible, assuming week.date is YYYY-MM-DD
+      try {
+        const parts = week.date.split('-');
+        if (parts.length === 3) {
+          return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+      } catch (e) { }
+      return week.date;
+    }
+    return 'Unknown Date';
+  };
+
+  const allCompleted = useMemo(() => {
+    return (registrations || [])
+      .filter((r: any) => r.performance_status === 'completed')
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [registrations]);
+
+  const uniqueDates = useMemo(() => {
+    const dates = new Set<string>();
+    allCompleted.forEach((reg: any) => {
+      const pDate = getPerfDate(reg.slot_id);
+      if (pDate !== 'Unknown Date') dates.add(pDate);
+    });
+    return Array.from(dates);
+  }, [allCompleted, performanceWeeks]);
+
+  const filteredSolos = useMemo(() => {
+    return allCompleted.filter((reg: any) => {
+      const matchesSearch = reg.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesVoice = voicePartFilter === 'All' || reg.voice_part === voicePartFilter;
+      const pDate = getPerfDate(reg.slot_id);
+      const matchesDate = dateFilter === 'All' || pDate === dateFilter;
+      return matchesSearch && matchesVoice && matchesDate;
+    });
+  }, [allCompleted, searchQuery, voicePartFilter, dateFilter, performanceWeeks]);
+
+  const totalPages = Math.ceil(filteredSolos.length / itemsPerPage);
+  const paginatedSolos = filteredSolos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, voicePartFilter, dateFilter]);
+
+  const handleSave = async (id: string) => {
+    setSaving(true);
+    try {
+      await updatePerformanceStatus(id, 'completed', feedback);
+      await fetchData();
+      setEditingId(null);
+    } catch (err: any) {
+      console.error(err);
+      setConfirmModal({
+        isOpen: true, title: "Save Failed", message: err.message || "Could not save MD comments.", confirmText: "Close", hideCancel: true, onConfirm: () => { }
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">Post-Performance Notes</h2>
+          <p className="text-slate-500 dark:text-slate-400 font-medium">Review completed solos and append or edit feedback notes.</p>
+        </div>
+        <div className="flex items-center gap-3 bg-indigo-500/10 text-indigo-500 px-5 py-2.5 rounded-2xl border border-indigo-500/20 w-fit">
+          <MessageSquareHeart size={20} />
+          <span className="text-xl font-black">{allCompleted.length}</span>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 bg-white dark:bg-[#131521] p-4 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm mb-6">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all"
+          />
+        </div>
+
+        <select
+          value={voicePartFilter}
+          onChange={(e) => setVoicePartFilter(e.target.value)}
+          className="bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none cursor-pointer"
+        >
+          {['All', ...VOICE_PARTS].map(p => (
+            <option key={p} value={p}>{p === 'All' ? 'All Voice Parts' : p}</option>
+          ))}
+        </select>
+
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none cursor-pointer"
+        >
+          <option value="All">All Dates</option>
+          {uniqueDates.map(d => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {paginatedSolos.map((reg: any) => (
+          <div key={reg.id} className="bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[2rem] p-6 shadow-xl shadow-slate-200/50 dark:shadow-none relative">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white pr-10">{reg.full_name}</h3>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest leading-relaxed">
+                  {reg.voice_part} • {getPerfDate(reg.slot_id)}
+                  <span className="opacity-50 ml-1">(S-{reg.slot_id})</span>
+                </p>
+              </div>
+              <span className="bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-emerald-500/20 shrink-0">
+                Completed
+              </span>
+            </div>
+
+            {editingId === reg.id ? (
+              <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-white/5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Edit MD Feedback</label>
+                <textarea
+                  value={feedback}
+                  onChange={e => setFeedback(e.target.value)}
+                  placeholder="Type feedback here to save to the member's portal history..."
+                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl p-4 text-sm focus:border-indigo-500 outline-none resize-none"
+                  rows={4}
+                />
+                <div className="flex gap-3 justify-end">
+                  <button onClick={() => setEditingId(null)} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5">Cancel</button>
+                  <button
+                    onClick={() => handleSave(reg.id)}
+                    disabled={saving}
+                    className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {saving && <Loader2 size={14} className="animate-spin" />} Save Notes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="pt-4 border-t border-slate-100 dark:border-white/5 relative group cursor-pointer" onClick={() => { setFeedback(reg.md_comments || ''); setEditingId(reg.id); }}>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-1.5"><MessageSquareHeart size={12} /> MD Feedback</span>
+                  <button className="text-slate-400 group-hover:text-indigo-500 transition-colors bg-slate-50 dark:bg-white/5 p-1.5 rounded-lg opacity-0 group-hover:opacity-100">
+                    <Edit3 size={14} />
+                  </button>
+                </div>
+                <p className="text-sm text-slate-600 dark:text-slate-300 italic min-h-[3rem] whitespace-pre-wrap">
+                  {reg.md_comments || <span className="text-slate-400 break-words opacity-50">No notes written. Click to add.</span>}
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {filteredSolos.length === 0 && (
+          <div className="col-span-full py-20 text-center bg-slate-50 dark:bg-[#0b0d17] border border-dashed border-slate-200 dark:border-white/10 rounded-[2.5rem]">
+            <MessageSquareHeart size={32} className="mx-auto text-slate-400 mb-4 opacity-50" />
+            <h3 className="text-xl font-black text-slate-400">No Solos Match Your Criteria</h3>
+          </div>
+        )}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-6 border-t border-slate-200 dark:border-white/5">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl text-xs font-black uppercase tracking-widest hover:border-indigo-500 hover:text-indigo-500 transition-all disabled:opacity-50"
+          >
+            <ChevronLeft size={16} /> Previous
+          </button>
+
+          <div className="text-xs font-bold text-slate-500">
+            Page <span className="text-slate-900 dark:text-white mx-1">{currentPage}</span> of {totalPages}
+          </div>
+
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl text-xs font-black uppercase tracking-widest hover:border-indigo-500 hover:text-indigo-500 transition-all disabled:opacity-50"
+          >
+            Next <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Admin View ---
 
 function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setConfirmModal: any }) {
@@ -2988,13 +3503,13 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
 
   // Members Tab State
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<any>(null);
 
   const [isSavingMember, setIsSavingMember] = useState(false);
 
   const [selectedRepertoires, setSelectedRepertoires] = useState<string[]>([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
-
 
   const fetchData = async () => {
     try {
@@ -3646,15 +4161,30 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                     />
                   </div>
                   {activeTab === 'members' && (
-                    <button
-                      onClick={() => {
-                        setEditingMember(null);
-                        setIsMemberModalOpen(true);
-                      }}
-                      className="w-full md:w-auto flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl text-sm font-bold transition-all whitespace-nowrap shadow-lg shadow-emerald-500/20"
-                    >
-                      <Plus size={16} /> Add Member
-                    </button>
+                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                      <a
+                        href="/solo_members_template.csv"
+                        download="solo_members_template.csv"
+                        className="w-full sm:w-auto flex justify-center items-center gap-2 px-6 py-3 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
+                      >
+                        <Download size={16} /> Template
+                      </a>
+                      <button
+                        onClick={() => setIsImportModalOpen(true)}
+                        className="w-full sm:w-auto flex justify-center items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl text-sm font-bold transition-all whitespace-nowrap hover:scale-105 active:scale-95 shadow-xl shadow-slate-900/10 dark:shadow-white/10"
+                      >
+                        <Upload size={16} /> Import CSV
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingMember(null);
+                          setIsMemberModalOpen(true);
+                        }}
+                        className="w-full sm:w-auto flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-sm font-bold transition-all whitespace-nowrap shadow-xl shadow-emerald-500/20 hover:scale-105 active:scale-95"
+                      >
+                        <Plus size={16} /> Add Member
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -4218,14 +4748,16 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
               </div>
             ) : activeTab === 'analytics' ? (
               <AnalyticsView registrations={registrations} repertoires={repertoires} />
+            ) : activeTab === 'history' ? (
+              <CompletedSolosView registrations={registrations} performanceWeeks={performanceWeeks} fetchData={fetchData} setConfirmModal={setConfirmModal} />
             ) : activeTab === 'live' ? (
               <LiveModeView
                 registrations={registrations}
                 performanceWeeks={performanceWeeks}
                 setConfirmModal={setConfirmModal}
-                onUpdateStatus={async (id: string, status: string) => {
+                onUpdateStatus={async (id: string, status: string, md_comments?: string) => {
                   try {
-                    await updatePerformanceStatus(id, status);
+                    await updatePerformanceStatus(id, status, md_comments);
                     await fetchData();
                   } catch (err: any) {
                     console.error(err);
@@ -4499,6 +5031,14 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
             )}
           </motion.div>
         </AnimatePresence>
+
+        <ImportMembersModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onRefresh={fetchData}
+          setConfirmModal={setConfirmModal}
+        />
+
         <MemberProfileModal
           member={selectedMember}
           isOpen={!!selectedMember}
@@ -4565,7 +5105,7 @@ function RosterView() {
     <Layout subtitle="Performance Roster" isAuthenticated={false}>
       <div className="glass p-8 md:p-12 rounded-[2.5rem] border-slate-200 dark:border-white/5 space-y-10 relative overflow-hidden">
         <div className="text-center max-w-3xl mx-auto">
-          <h2 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4 italic">Roster for Compulsory Solo Performance 2026</h2>
+          <h2 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4 italic">Roster for Amemuso Compulsory Recital 2026</h2>
           <p className="text-slate-500 dark:text-slate-400 font-medium">Weekly performance schedule and assigned soloist slots.</p>
         </div>
 
@@ -5062,7 +5602,7 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0b0d17] text-slate-900 dark:text-white">
+    <div className="font-portal min-h-screen bg-[#F8FAFC] dark:bg-[#0b0d17] text-slate-900 dark:text-white">
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div
@@ -5083,7 +5623,7 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
             </div>
             <div>
               <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest italic">Member Portal</h2>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-none mt-1">Amemuso Solo System</p>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-none mt-1">Amemuso Compulsory Recital System</p>
             </div>
           </div>
 
@@ -5165,7 +5705,7 @@ function PortalLogin({ onLogin, loading, error }: any) {
   const [pin, setPin] = useState('');
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0b0d17] flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent">
+    <div className="font-portal min-h-screen bg-[#F8FAFC] dark:bg-[#0b0d17] flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -5280,141 +5820,186 @@ function PortalDashboard({ member, stats }: any) {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="bg-indigo-600 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-2xl shadow-indigo-500/30">
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-          <div className="space-y-4">
-            <h1 className="text-4xl font-black italic uppercase tracking-tight">Welcome Back,<br />{member.full_name}</h1>
+    <div className="space-y-6">
+      <div className="bg-gradient-to-br from-[#0A0D1F] via-[#1A183A] to-[#0A0D1F] rounded-[3rem] p-8 md:p-10 text-white relative overflow-hidden shadow-2xl shadow-indigo-900/50 border border-white/5">
+        {/* Abstract decorative elements */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/20 rounded-full blur-[80px] -mr-64 -mt-64 pointer-events-none mix-blend-screen" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-fuchsia-500/10 rounded-full blur-[60px] -ml-32 -mb-32 pointer-events-none mix-blend-screen" />
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none"></div>
+
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-10">
+          <div className="space-y-5">
+            <div>
+              <p className="text-indigo-300 text-xs font-bold uppercase tracking-[0.3em] mb-2 selection:bg-white/20">Member Portal</p>
+              <h1 className="text-4xl sm:text-5xl font-black uppercase tracking-tight leading-none">
+                Welcome Back,<br />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-100 to-indigo-300">
+                  {member.full_name}
+                </span>
+              </h1>
+            </div>
+
             <div className="flex flex-wrap gap-2">
-              <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-lg text-[9px] font-black uppercase tracking-widest">{member.voice_part}</span>
-              <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-lg text-[9px] font-black uppercase tracking-widest">Joined {new Date(member.joined_at).getFullYear()}</span>
-              {member.is_on_probation && <span className="px-3 py-1 bg-amber-400 text-amber-900 rounded-lg text-[9px] font-black uppercase tracking-widest">On Probation</span>}
+              <span className="px-3 py-1.5 bg-white/10 backdrop-blur-md border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-indigo-100 shadow-lg leading-none flex items-center">{member.voice_part}</span>
+              <span className="px-3 py-1.5 bg-white/10 backdrop-blur-md border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-indigo-100 shadow-lg leading-none flex items-center">Joined {new Date(member.joined_at).getFullYear()}</span>
+              {member.is_on_probation && <span className="px-3 py-1.5 bg-amber-500/20 backdrop-blur-md border border-amber-500/30 text-amber-300 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg leading-none flex items-center gap-1.5"><AlertCircle size={12} /> Probation</span>}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-4 w-full lg:w-auto">
-            <div className="bg-white/10 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 min-w-full lg:min-w-[140px]">
-              <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-1">Attendance</p>
-              <h4 className="text-3xl font-black">{stats?.percentage || 0}%</h4>
-              <p className="text-[9px] text-white/40 font-bold uppercase mt-1">{stats?.attended} of {stats?.total} events</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full lg:w-auto">
+            {/* Stats Card 1 */}
+            <div className="bg-white/5 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/10 hover:border-white/20 transition-colors group min-w-full lg:min-w-[140px] shadow-xl overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="relative z-10">
+                <p className="text-indigo-200/80 text-[10px] font-black uppercase tracking-widest mb-1 flex items-center gap-2"><CalendarCheck size={12} /> Attendance</p>
+                <h4 className="text-3xl font-black tracking-tight text-white drop-shadow-sm">{stats?.percentage || 0}%</h4>
+                <p className="text-[9px] text-white/50 font-bold uppercase mt-1 tracking-wider">{stats?.attended} of {stats?.total} events</p>
+              </div>
             </div>
-            <div className="bg-white/10 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 min-w-full lg:min-w-[140px]">
-              <p className="text-white/60 text-[10px] font-black uppercase tracking-widest mb-1">Solo Credits</p>
-              <h4 className="text-3xl font-black">{member.is_soloist ? 'Active' : 'M-Member'}</h4>
-              <p className="text-[9px] text-white/40 font-bold uppercase mt-1">Status Summary</p>
+
+            {/* Honorarium Card (High Contrast) */}
+            <div className="bg-gradient-to-b from-emerald-500/20 to-emerald-900/40 backdrop-blur-2xl p-6 rounded-[2rem] border-2 border-emerald-400/50 hover:border-emerald-300 shadow-[0_0_30px_-5px_var(--tw-shadow-color)] shadow-emerald-500/20 transition-all group min-w-full lg:min-w-[140px] relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-400/30 blur-2xl rounded-full -mr-8 -mt-8" />
+              <div className="relative z-10">
+                <p className="text-emerald-300 text-[10px] font-black uppercase tracking-widest mb-1 flex items-center gap-2"><Trophy size={12} /> Honorarium</p>
+                <div className="flex items-baseline gap-1">
+                  <h4 className="text-4xl font-black tracking-tight text-white drop-shadow-md">{calculateHonorarium(stats?.percentage || 0)}</h4>
+                  <span className="text-xl font-bold text-emerald-300">%</span>
+                </div>
+                <p className="text-[9px] text-emerald-200/80 font-bold uppercase mt-1 tracking-wider">Current Tier</p>
+              </div>
+            </div>
+
+            {/* Stats Card 3 */}
+            <div className="bg-white/5 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/10 hover:border-white/20 transition-colors group min-w-full lg:min-w-[140px] shadow-xl relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="relative z-10">
+                <p className="text-indigo-200/80 text-[10px] font-black uppercase tracking-widest mb-1 flex items-center gap-2"><Music size={12} /> Solo Credits</p>
+                <h4 className="text-3xl font-black tracking-tight text-white drop-shadow-sm">{member.is_soloist ? 'Active' : 'M-Mem'}</h4>
+                <p className="text-[9px] text-white/50 font-bold uppercase mt-1 tracking-wider">Status Summary</p>
+              </div>
             </div>
           </div>
         </div>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-400/20 rounded-full blur-3xl -ml-24 -mb-24" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* New Attendance Check-in Card */}
-        <div className="bg-white dark:bg-[#131521] rounded-[3rem] p-10 border-4 border-indigo-600/20 dark:border-indigo-500/10 space-y-6 shadow-2xl shadow-indigo-500/10">
-          <div className="flex items-center gap-4 mb-2">
-            <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <CalendarCheck size={24} />
-            </div>
-            <div>
-              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Live Check-in</h3>
-              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Enter rehearsal code</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleCheckIn} className="space-y-4">
-            <div className="relative">
-              <input
-                type="text"
-                value={code}
-                onChange={e => setCode(e.target.value.toUpperCase())}
-                placeholder="0000"
-                maxLength={6}
-                className="w-full bg-slate-50 dark:bg-[#0b0d17] border-2 border-slate-200 dark:border-white/5 rounded-2xl px-6 py-5 text-2xl font-black tracking-[0.5em] text-center focus:border-indigo-600 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-white/5"
-              />
-              {loading && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                  <Loader2 className="animate-spin text-indigo-600" size={20} />
-                </div>
-              )}
+        <div className="bg-white/80 dark:bg-[#131521]/80 backdrop-blur-2xl rounded-[2.5rem] p-8 border border-slate-200/50 dark:border-white/5 space-y-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-indigo-500/10 relative overflow-hidden group">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 mb-2">
+              <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                <CalendarCheck size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Live Check-in</h3>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Enter rehearsal code</p>
+              </div>
             </div>
 
-            {message && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className={cn(
-                  "p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border",
-                  message.type === 'success'
-                    ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                    : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+            <form onSubmit={handleCheckIn} className="space-y-4 mt-6">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={code}
+                  onChange={e => setCode(e.target.value.toUpperCase())}
+                  placeholder="0000"
+                  maxLength={6}
+                  className="w-full bg-slate-50/50 dark:bg-black/20 border-2 border-slate-200/50 dark:border-white/5 rounded-2xl px-6 py-5 text-2xl font-black tracking-[0.5em] text-center focus:border-indigo-600 focus:bg-white dark:focus:bg-[#0b0d17] outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-white/5 shadow-inner"
+                />
+                {loading && (
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    <Loader2 className="animate-spin text-indigo-600" size={20} />
+                  </div>
                 )}
+              </div>
+
+              {message && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className={cn(
+                    "p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border backdrop-blur-sm",
+                    message.type === 'success'
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                      : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                  )}
+                >
+                  {message.text}
+                </motion.div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading || code.length < 4}
+                className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-xl shadow-indigo-500/20 hover:scale-[1.02] active:scale-98 hover:shadow-indigo-500/40 transition-all disabled:opacity-50"
               >
-                {message.text}
-              </motion.div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || code.length < 4}
-              className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-xl shadow-indigo-500/20 hover:scale-[1.02] active:scale-98 transition-all disabled:opacity-50"
-            >
-              Confirm Check-in
-            </button>
-          </form>
+                Confirm Check-in
+              </button>
+            </form>
+          </div>
         </div>
 
-        <div className="bg-white dark:bg-[#131521] rounded-[3rem] p-10 border border-slate-200 dark:border-white/5 space-y-6">
-          <div className="flex items-center gap-4 mb-2">
-            <div className="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center">
-              <Trophy size={24} />
-            </div>
-            <div>
-              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Recent Progress</h3>
-              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Your activities</p>
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
-              <div className="w-10 h-10 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center">
-                <CheckSquare size={18} />
+        {/* Progress Card */}
+        <div className="bg-white/80 dark:bg-[#131521]/80 backdrop-blur-2xl rounded-[2.5rem] p-8 border border-slate-200/50 dark:border-white/5 space-y-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-amber-500/5 relative overflow-hidden group">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center">
+                <Trophy size={24} />
               </div>
-              <div className="flex-1">
-                <p className="text-xs font-bold text-slate-900 dark:text-white">Attendance Stability</p>
-                <p className="text-[10px] text-slate-500">You have been present at the last 3 rehearsals</p>
+              <div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Recent Progress</h3>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Your activities</p>
               </div>
             </div>
-            <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
-              <div className="w-10 h-10 bg-indigo-500/10 text-indigo-500 rounded-xl flex items-center justify-center">
-                <Music size={18} />
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-10 h-10 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center">
+                  <CheckSquare size={18} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">Attendance Stability</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">You have been present at the last 3 rehearsals</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <p className="text-xs font-bold text-slate-900 dark:text-white">Solo Application</p>
-                <p className="text-[10px] text-slate-500">{member.is_soloist ? 'Assigned to slot' : 'Register for upcoming soloist slots'}</p>
+              <div className="flex items-center gap-4 p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-10 h-10 bg-indigo-500/10 text-indigo-500 rounded-xl flex items-center justify-center">
+                  <Music size={18} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">Solo Application</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{member.is_soloist ? 'Assigned to slot' : 'Register for upcoming soloist slots'}</p>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#131521] rounded-[3rem] p-10 border border-slate-200 dark:border-white/5 space-y-6 lg:col-span-2">
-          <div className="flex items-center gap-4 mb-2">
-            <div className="w-12 h-12 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center">
-              <ExternalLink size={24} />
+        {/* Quick Actions Card */}
+        <div className="bg-white/80 dark:bg-[#131521]/80 backdrop-blur-2xl rounded-[2.5rem] p-8 border border-slate-200/50 dark:border-white/5 space-y-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-indigo-500/5 relative overflow-hidden group lg:col-span-2">
+          <div className="absolute inset-0 bg-gradient-to-t from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center">
+                <ExternalLink size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Quick Actions</h3>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Jump to</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Quick Actions</h3>
-              <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Jump to</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Link to="/members" className="p-6 bg-white dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5 hover:border-indigo-500/50 hover:shadow-lg dark:hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300 group/link">
+                <Users size={20} className="mb-3 text-indigo-500 group-hover/link:scale-110 transition-transform" />
+                <p className="text-xs font-black uppercase tracking-widest group-hover/link:text-indigo-500 transition-colors">Directory</p>
+              </Link>
+              <Link to="/status" className="p-6 bg-white dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5 hover:border-indigo-500/50 hover:shadow-lg dark:hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300 group/link">
+                <Monitor size={20} className="mb-3 text-indigo-500 group-hover/link:scale-110 transition-transform" />
+                <p className="text-xs font-black uppercase tracking-widest group-hover/link:text-indigo-500 transition-colors">Solo Wall</p>
+              </Link>
             </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Link to="/members" className="p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5 hover:border-indigo-500/50 transition-all group">
-              <Users size={20} className="mb-3 text-indigo-500" />
-              <p className="text-xs font-black uppercase tracking-widest group-hover:text-indigo-500 transition-colors">Directory</p>
-            </Link>
-            <Link to="/status" className="p-6 bg-slate-50 dark:bg-white/5 rounded-3xl border border-slate-100 dark:border-white/5 hover:border-indigo-500/50 transition-all group">
-              <Monitor size={20} className="mb-3 text-indigo-500" />
-              <p className="text-xs font-black uppercase tracking-widest group-hover:text-indigo-500 transition-colors">Solo Wall</p>
-            </Link>
           </div>
         </div>
       </div>

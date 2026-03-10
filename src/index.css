@@ -52,3 +52,7 @@ body {
 .glow-emerald {
   box-shadow: 0 0 30px rgba(52, 211, 153, 0.2);
 }
+
+.font-portal {
+  font-family: 'Outfit', system-ui, sans-serif;
+}
