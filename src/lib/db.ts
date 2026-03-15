@@ -369,7 +369,12 @@ export const deleteMember = async (id: string) => {
 export const getMemberByPortalId = async (portalId: string) => {
     const { data, error } = await supabase
         .from('members')
-        .select('*')
+        .select(`
+            *,
+            member_positions (
+                title
+            )
+        `)
         .eq('portal_id', portalId)
         .single();
     if (error && error.code !== 'PGRST116') throw error;

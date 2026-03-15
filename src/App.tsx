@@ -5573,12 +5573,22 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [memberStats, setMemberStats] = useState<any>(null);
+  const [attendanceEvents, setAttendanceEvents] = useState<any[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
+  const isProvost = member?.member_positions?.title?.toLowerCase() === 'provost';
+
+  const fetchPortalData = async () => {
     if (member) {
       getMemberAttendanceStats(member.id).then(setMemberStats).catch(console.error);
+      if (isProvost) {
+        getAttendanceEvents().then(setAttendanceEvents).catch(console.error);
+      }
     }
+  };
+
+  useEffect(() => {
+    fetchPortalData();
   }, [member]);
 
   const handleLoginSubmit = async (portalId: string, pin: string) => {
@@ -5631,8 +5641,9 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
             {[
               { id: 'dashboard', label: 'Dashboard', icon: Grid },
               { id: 'history', label: 'My History', icon: History },
+              isProvost && { id: 'attendance', label: 'Attendance', icon: CalendarCheck },
               { id: 'profile', label: 'Manage Profile', icon: Edit2 }
-            ].map(item => (
+            ].filter(Boolean).map((item: any) => (
               <button
                 key={item.id}
                 onClick={() => {
@@ -5693,6 +5704,13 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
         <main className="p-4 lg:p-12">
           {activeTab === 'dashboard' && <PortalDashboard member={member} stats={memberStats} />}
           {activeTab === 'history' && <PortalHistory memberId={member.id} />}
+          {isProvost && activeTab === 'attendance' && (
+            <AttendanceManagement
+              events={attendanceEvents}
+              fetchData={fetchPortalData}
+              setConfirmModal={setConfirmModal}
+            />
+          )}
           {activeTab === 'profile' && <PortalProfileEditor member={member} onUpdate={onLogin} setConfirmModal={setConfirmModal} />}
         </main>
       </div>
