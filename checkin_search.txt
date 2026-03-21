@@ -1,0 +1,23 @@
+2164-    fetchHistoryAndStats();
+2165-  }, [memberId]);
+2166-
+2167-  if (loading) return <div className="flex justify-center p-4"><Loader2 className="animate-spin text-indigo-500" size={20} /></div>;
+2168-
+2169:  // Honorarium calc is shielded by isAdmin check in UI below
+2170-  const honorariumPct = attendance ? calculateHonorarium(attendance.percentage) : 0;
+2171-
+2172-  return (
+2173-    <div className="space-y-6">
+2174-      {isAdmin && (
+--
+5863-      navigator.geolocation.getCurrentPosition(
+5864-        (position) => performCheckIn(position.coords.latitude, position.coords.longitude),
+5865-        (error) => {
+5866-          console.warn('Geolocation failed:', error);
+5867-          if (error.code === error.PERMISSION_DENIED) {
+5868:            setMessage({ text: 'Location access denied. Please allow location access in your browser to check in.', type: 'error' });
+5869-            setLoading(false);
+5870-          } else {
+5871-            performCheckIn();
+5872-          }
+5873-        },

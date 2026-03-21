@@ -566,13 +566,14 @@ export const getAttendanceRecords = async (eventId: string) => {
     return data || [];
 };
 
-export const markAttendance = async (eventId: string, memberId: string, metadata: any = {}) => {
+export const markAttendance = async (eventId: string, memberId: string, metadata: any = {}, isLate: boolean = false) => {
     const { data, error } = await supabase
         .from('attendance_records')
         .insert([{
             event_id: eventId,
             member_id: memberId,
-            metadata
+            metadata,
+            is_late: isLate
         }])
         .select();
     if (error) throw error;
@@ -591,16 +592,17 @@ export const getMemberAttendanceStats = async (memberId: string) => {
     const countedEventIds = (countedEvents || []).map((e: any) => e.id);
     const total = countedEventIds.length;
 
-    // Attended = records for this member in events that count toward stats
+    // Attended = records for this member in events that count toward stats, and they were NOT late
     const { data: records, error: errRecords } = await supabase
         .from('attendance_records')
-        .select('event_id')
+        .select('event_id, is_late')
         .eq('member_id', memberId)
         .in('event_id', total > 0 ? countedEventIds : ['00000000-0000-0000-0000-000000000000']);
 
     if (errRecords) throw errRecords;
 
-    const attended = records?.length || 0;
+    const validAttended = records?.filter((r: any) => !r.is_late) || [];
+    const attended = validAttended.length;
     const percentage = total > 0 ? Math.round((attended / total) * 100) : 0;
 
     return { attended, total, percentage };
@@ -656,17 +658,21 @@ export const validateAndCheckIn = async (memberId: string, code: string, memberL
         throw new Error('Invalid check-in code.');
     }
 
-    // 3. Check if the event's time window is still open
+    // 3. Check if the event's code is still valid for today
     const now = new Date();
-    const start = new Date(`${matchingEvent.date}T${matchingEvent.start_time}`);
-    const end = new Date(start.getTime() + (matchingEvent.duration_minutes || 60) * 60 * 1000);
+    
+    // Convert both to local date strings to compare roughly
+    const eventDateObj = new Date(`${matchingEvent.date}T00:00:00`);
+    const hoursDiff = Math.abs(now.getTime() - eventDateObj.getTime()) / 36e5;
+    
+    // Valid if it's within roughly 24 hours of the event date (handles timezone offsets up to a point)
+    if (hoursDiff > 30) {
+        throw new Error('This event check-in code is no longer valid for today.');
+    }
 
-    if (now > end) {
-        throw new Error('This event has ended. Check-in is no longer available.');
-    }
-    if (now < start) {
-        throw new Error('This event has not started yet.');
-    }
+    // Determine if late (checking in after start time)
+    const start = new Date(`${matchingEvent.date}T${matchingEvent.start_time}`);
+    const isLate = now > start;
 
     // 4. Validate Location if Event requires it
     if (matchingEvent.lat != null && matchingEvent.lng != null) {
@@ -701,7 +707,89 @@ export const validateAndCheckIn = async (memberId: string, code: string, memberL
     return markAttendance(matchingEvent.id, memberId, {
         source: 'member_portal',
         timestamp: new Date().toISOString()
-    });
+    }, isLate);
+};
+
+export const getCurrentActiveSession = async (memberId: string) => {
+    // Look for records where check_out_time is null for today's active events
+    const { data: activeEvents } = await supabase.from('attendance_events').select('*').eq('is_active', true);
+    if (!activeEvents || activeEvents.length === 0) return null;
+
+    const eventIds = activeEvents.map((e: any) => e.id);
+    const { data: records } = await supabase.from('attendance_records')
+        .select('*, attendance_events(*)')
+        .eq('member_id', memberId)
+        .in('event_id', eventIds)
+        .is('check_out_time', null)
+        .order('check_in_time', { ascending: false });
+
+    return records && records.length > 0 ? records[0] : null;
+};
+
+export const validateAndCheckOut = async (recordId: string, eventStartTimeStr: string, eventDateStr: string) => {
+    const now = new Date();
+    const start = new Date(`${eventDateStr}T${eventStartTimeStr}`);
+    const minimumCheckoutTime = new Date(start.getTime() + (105 * 60 * 1000)); // 1 hour 45 minutes
+    
+    if (now < minimumCheckoutTime) {
+        throw new Error('Check-out is only available 1 hour and 45 minutes after the rehearsal start time.');
+    }
+
+    const { data, error } = await supabase
+        .from('attendance_records')
+        .update({ check_out_time: now.toISOString() })
+        .eq('id', recordId)
+        .select();
+
+    if (error) throw error;
+    return data;
+};
+
+export const adminCheckOutMember = async (recordId: string, reason: string) => {
+    const now = new Date().toISOString();
+    
+    // Get existing metadata first to merge the reason safely
+    const { data: record, error: fetchErr } = await supabase
+        .from('attendance_records')
+        .select('metadata')
+        .eq('id', recordId)
+        .single();
+        
+    if (fetchErr) throw fetchErr;
+    
+    const meta = record?.metadata || {};
+    meta.admin_checkout_reason = reason;
+    meta.admin_checkout_time = now;
+
+    const { data, error } = await supabase
+        .from('attendance_records')
+        .update({ 
+            check_out_time: now,
+            metadata: meta
+        })
+        .eq('id', recordId)
+        .select();
+
+    if (error) throw error;
+    return data;
+};
+
+export const getMemberPortalAttendance = async (memberId: string) => {
+    const { data, error } = await supabase
+        .from('attendance_records')
+        .select(`
+            *,
+            attendance_events (
+                title,
+                date,
+                start_time
+            )
+        `)
+        .eq('member_id', memberId)
+        .order('check_in_time', { ascending: false });
+        
+    if (error) throw error;
+    return data || [];
 };
 
 // Haversine formula to find distance between two lat/lng coordinates in meters

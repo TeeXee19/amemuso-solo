@@ -1,0 +1,23 @@
+5606-
+5607-// --- Main App Entry ---
+5608-
+5609-// --- Member Portal View (Phase 6) ---
+5610-
+5611:function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
+5612-  const [activeTab, setActiveTab] = useState('dashboard');
+5613-  const [loading, setLoading] = useState(false);
+5614-  const [error, setError] = useState('');
+5615-  const [memberStats, setMemberStats] = useState<any>(null);
+5616-  const [attendanceEvents, setAttendanceEvents] = useState<any[]>([]);
+--
+6432-        <Route
+6433-          path="/admin"
+6434-          element={isAuthenticated ? <AdminView onLogout={handleLogout} setConfirmModal={setConfirmModal} /> : <Navigate to="/login" replace />}
+6435-        />
+6436-        <Route path="/login" element={<LoginView onLogin={handleLogin} />} />
+6437:        <Route path="/portal" element={<MemberPortalView member={portalMember} onLogin={handlePortalLogin} onLogout={handlePortalLogout} setConfirmModal={setConfirmModal} />} />
+6438-        <Route path="/" element={<RosterView />} />
+6439-        <Route path="/repertoire" element={<SongEntryView setConfirmModal={setConfirmModal} />} />
+6440-      </Routes>
+6441-      <AnimatePresence>
+6442-        <ConfirmModal

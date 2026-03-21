@@ -238,3 +238,8 @@ CREATE POLICY "Public insert attendance_records" ON attendance_records FOR INSER
 
 DROP POLICY IF EXISTS "Admin manage attendance_records" ON attendance_records;
 CREATE POLICY "Admin manage attendance_records" ON attendance_records FOR ALL USING (true);
+
+-- 15. Check-Out and Lateness (Phase 11)
+ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS check_out_time TIMESTAMP WITH TIME ZONE;
+ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS is_late BOOLEAN DEFAULT false;
+

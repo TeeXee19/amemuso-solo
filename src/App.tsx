@@ -9,7 +9,8 @@ import {
   getWaitlist, joinWaitlist, deleteWaitlistEntry, getAdminUser,
   getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers, uploadMemberPhoto, getMemberByPortalId,
   getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory,
-  getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, getMemberAttendanceStats, validateAndCheckIn, autoExpireEvents, calculateHonorarium
+  getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, getMemberAttendanceStats, validateAndCheckIn, autoExpireEvents, calculateHonorarium,
+  validateAndCheckOut, adminCheckOutMember, getMemberPortalAttendance, getCurrentActiveSession
 } from './lib/db';
 import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
@@ -24,7 +25,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const VOICE_PARTS = ['Soprano', 'Alto', 'Tenor', 'Bass'];
+const VOICE_PARTS = ['Soprano', 'Alto', 'Tenor', 'Bass', 'Instrumentalist'];
 
 // --- Components ---
 
@@ -215,7 +216,7 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
           <div className="flex justify-between items-center mb-6">
             <div className="space-y-1">
               <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight leading-none">
-                {member ? 'Edit Member Profile' : 'New Member Profile'}
+                {member ? 'Edit Member Management' : 'New Member Management'}
               </h3>
               <p className="text-[10px] text-slate-500 font-bold tracking-widest uppercase opacity-70">
                 {member ? `Record ID: ${member.id.substring(0, 8)}` : 'Create a new chorale record'}
@@ -866,10 +867,10 @@ function ImportMembersModal({ isOpen, onClose, onRefresh, setConfirmModal }: any
 
 function AdminSidebar({ activeTab, setActiveTab, repertoires, waitlist, onLogout }: any) {
   const menuItems = [
-    { id: 'list', label: 'Member List', icon: Users },
+    { id: 'list', label: 'Repertoire List', icon: Users },
     { id: 'checkin', label: 'Check-in', icon: Check, color: 'text-emerald-500' },
     { id: 'attendance', label: 'Attendance', icon: CalendarCheck, color: 'text-indigo-500' },
-    { id: 'members', label: 'Member Profiles', icon: Grid },
+    { id: 'members', label: 'Member Management', icon: Grid },
     { id: 'repertoire', label: 'Song Approvals', icon: Music, badge: repertoires.filter((s: any) => s.status === 'pending').length },
     { id: 'waitlist', label: 'Waitlist', icon: History, badge: waitlist.length },
     { id: 'analytics', label: 'Analytics', icon: Activity },
@@ -965,9 +966,9 @@ function Layout({ children, subtitle, isAuthenticated, onLogout, sidebar }: any)
   }, [theme]);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0d17] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col">
+    <div className="h-screen bg-slate-50 dark:bg-[#0b0d17] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col">
       {/* Top Navbar */}
-      <header className="h-[73px] px-8 py-4 flex justify-between items-center bg-white dark:bg-[#131521]/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/5 z-50 shadow-sm dark:shadow-none shrink-0">
+      <header className="sticky top-0 h-[73px] px-8 py-4 flex justify-between items-center bg-white dark:bg-[#131521]/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/5 z-50 shadow-sm dark:shadow-none shrink-0">
         <div className="flex items-center gap-4">
           <Link to="/" className="flex items-center gap-3 group">
             <button className="text-slate-500 hover:text-slate-900 dark:text-white mr-2 flex items-center justify-center"><ChevronRight className="rotate-180" size={16} /></button>
@@ -2281,7 +2282,7 @@ function MembersView() {
   );
 
   return (
-    <Layout subtitle="Member Directory" isAuthenticated={false}>
+    <Layout subtitle="Member Management" isAuthenticated={false}>
       <div className="space-y-8 max-w-6xl mx-auto">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -2396,6 +2397,7 @@ function AnalyticsView({ registrations, repertoires }: { registrations: any[], r
     alto: (registrations || []).filter(r => r.voice_part === 'Alto').length,
     tenor: (registrations || []).filter(r => r.voice_part === 'Tenor').length,
     bass: (registrations || []).filter(r => r.voice_part === 'Bass').length,
+    instrumentalist: (registrations || []).filter(r => r.voice_part === 'Instrumentalist').length,
   };
 
   const totalPossible = 70;
@@ -2836,12 +2838,15 @@ function PositionManager({ positions, onRefresh, setConfirmModal }: { positions:
 
 // --- Attendance Management (Phase 10) ---
 
-function AttendanceManagement({ events, fetchData, setConfirmModal }: any) {
+function AttendanceManagement({ events, fetchData, setConfirmModal, showDelete = true }: any) {
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [records, setRecords] = useState<any[]>([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
+  const [checkoutModal, setCheckoutModal] = useState<{ isOpen: boolean; recordId: string | null; reason: string; loading: boolean }>({
+    isOpen: false, recordId: null, reason: '', loading: false
+  });
 
   const [form, setForm] = useState({
     title: '',
@@ -2929,6 +2934,23 @@ function AttendanceManagement({ events, fetchData, setConfirmModal }: any) {
         .finally(() => setLoadingRecords(false));
     }
   }, [selectedEvent]);
+
+  const handleAdminCheckoutSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!checkoutModal.recordId || !checkoutModal.reason) return;
+    setCheckoutModal(prev => ({ ...prev, loading: true }));
+    try {
+      await adminCheckOutMember(checkoutModal.recordId, checkoutModal.reason);
+      if (selectedEvent) {
+        const updated = await getAttendanceRecords(selectedEvent.id);
+        setRecords(updated);
+      }
+      setCheckoutModal({ isOpen: false, recordId: null, reason: '', loading: false });
+    } catch (err) {
+      console.error(err);
+      setCheckoutModal(prev => ({ ...prev, loading: false }));
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -3027,14 +3049,16 @@ function AttendanceManagement({ events, fetchData, setConfirmModal }: any) {
                     >
                       {event.is_active ? <X size={16} /> : <Check size={16} />}
                     </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event.id, event.title); }}
-                      className={cn(
-                        "p-2 rounded-lg transition-all text-rose-400 hover:bg-rose-500/10",
-                      )}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {showDelete && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event.id, event.title); }}
+                        className={cn(
+                          "p-2 rounded-lg transition-all text-rose-400 hover:bg-rose-500/10",
+                        )}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-4 border-t border-white/10">
@@ -3077,16 +3101,29 @@ function AttendanceManagement({ events, fetchData, setConfirmModal }: any) {
               ) : (
                 <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                   {records.map((record: any) => (
-                    <div key={record.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
+                    <div key={record.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5 gap-3">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 text-[10px] font-black uppercase">
                           {record.members?.voice_part?.[0]}
                         </div>
                         <div>
                           <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{record.members?.full_name}</p>
-                          <p className="text-[9px] text-slate-500">{new Date(record.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                          <div className="text-[9px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                             <span>In: {new Date(record.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                             {record.is_late && <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-500 rounded font-black tracking-widest uppercase">Late</span>}
+                             {record.check_out_time && <span>• Out: {new Date(record.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                          </div>
                         </div>
                       </div>
+                      
+                      {!record.check_out_time && (
+                        <button
+                          onClick={() => setCheckoutModal({ isOpen: true, recordId: record.id, reason: '', loading: false })}
+                          className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 rounded-lg transition-colors border border-amber-500/20"
+                        >
+                          Check Out
+                        </button>
+                      )}
                     </div>
                   ))}
                   {records.length === 0 && (
@@ -3221,6 +3258,18 @@ function AttendanceManagement({ events, fetchData, setConfirmModal }: any) {
                   </button>
                 </div>
 
+                {form.lat && form.lng && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Allowed Distance (Meters)</label>
+                    <input
+                      type="number"
+                      value={form.radius_meters}
+                      onChange={e => setForm({ ...form, radius_meters: parseInt(e.target.value) })}
+                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-5 py-4 text-xs font-bold outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                )}
+                
                 <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5">
                   <div>
                     <p className="text-xs font-bold text-slate-900 dark:text-white">Count toward attendance %</p>
@@ -3239,19 +3288,47 @@ function AttendanceManagement({ events, fetchData, setConfirmModal }: any) {
                     )} />
                   </button>
                 </div>
+
               </div>
 
               <div className="flex gap-4 pt-4">
-                <button onClick={() => setIsAddingEvent(false)} className="flex-1 py-4 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 font-bold rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all">Cancel</button>
+                <button type="button" onClick={() => setIsAddingEvent(false)} className="flex-1 py-4 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 font-bold rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all">Cancel</button>
                 <button
+                  type="button"
                   onClick={handleCreateEvent}
-                  disabled={loading || !form.title}
+                  disabled={loading || !form.title || !form.start_time}
                   className="flex-1 py-4 bg-indigo-600 text-white font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl shadow-xl shadow-indigo-600/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
                 >
                   {loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Create Event'}
                 </button>
               </div>
             </div>
+          </motion.div>
+        </div>
+      )}
+
+      {checkoutModal.isOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-sm bg-white dark:bg-[#131521] rounded-[2rem] shadow-2xl overflow-hidden border border-slate-200 dark:border-white/10 p-8 space-y-6">
+            <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase italic">Manual Check Out</h3>
+            <form onSubmit={handleAdminCheckoutSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Reason for manual check out</label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={checkoutModal.reason}
+                  onChange={(e) => setCheckoutModal(prev => ({ ...prev, reason: e.target.value }))}
+                  placeholder="e.g. Member phone died, illness..."
+                  className="w-full bg-slate-50 dark:bg-black/20 border-2 border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-sm focus:border-amber-500 outline-none transition-all"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setCheckoutModal({ isOpen: false, recordId: null, reason: '', loading: false })} disabled={checkoutModal.loading} className="flex-1 py-3 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 rounded-xl font-bold text-xs uppercase tracking-widest">Cancel</button>
+                <button type="submit" disabled={checkoutModal.loading || !checkoutModal.reason} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-amber-500/20 hover:bg-amber-600 transition-colors">{checkoutModal.loading ? 'Checking out...' : 'Check Out'}</button>
+              </div>
+            </form>
           </motion.div>
         </div>
       )}
@@ -3817,6 +3894,7 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
     alto: (statsSource || []).filter(r => r.voice_part === 'Alto').length,
     tenor: (statsSource || []).filter(r => r.voice_part === 'Tenor').length,
     bass: (statsSource || []).filter(r => r.voice_part === 'Bass').length,
+    instrumentalist: (statsSource || []).filter(r => r.voice_part === 'Instrumentalist').length,
   };
 
   const handleEditClick = (r: any) => {
@@ -4192,13 +4270,14 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
 
             {/* Dashboard Stats */}
             {(activeTab === 'list' || activeTab === 'members') && (
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
                 {[
                   { label: 'Total', count: stats.total, color: 'text-slate-900 dark:text-white', bg: 'bg-indigo-600/20', border: 'border-indigo-500/30' },
                   { label: 'Soprano', count: stats.soprano, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
                   { label: 'Alto', count: stats.alto, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
                   { label: 'Tenor', count: stats.tenor, color: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20' },
-                  { label: 'Bass', count: stats.bass, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }
+                  { label: 'Bass', count: stats.bass, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+                  { label: 'Inst.', count: stats.instrumentalist, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' }
                 ].map((s, i) => (
                   <div key={i} className={cn("p-4 rounded-3xl border flex flex-col justify-center items-center gap-1", s.bg, s.border)}>
                     <span className={cn("text-2xl font-black", s.color)}>{s.count}</span>
@@ -4309,6 +4388,44 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-6 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-[#0b0d17]/50 rounded-b-[2.5rem]">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-500 font-medium">Rows per page:</span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                      className="bg-white dark:bg-[#131521] border border-slate-300 dark:border-white/10 text-slate-900 dark:text-slate-300 text-xs rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-slate-500 font-medium">
+                      Page <span className="text-slate-900 dark:text-white">{currentPage}</span> of {totalPages || 1}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={currentPage <= 1}
+                        onClick={() => setCurrentPage((prev: number) => prev - 1)}
+                        className="p-2 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all text-slate-600 dark:text-slate-400"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      <button
+                        disabled={currentPage >= totalPages}
+                        onClick={() => setCurrentPage((prev: number) => prev + 1)}
+                        className="p-2 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-30 transition-all text-slate-600 dark:text-slate-400"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : activeTab === 'attendance' ? (
@@ -4480,7 +4597,8 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                               r.voice_part === 'Soprano' && "bg-rose-500/10 text-rose-400 border border-rose-500/20",
                               r.voice_part === 'Alto' && "bg-amber-500/10 text-amber-400 border border-amber-500/20",
                               r.voice_part === 'Tenor' && "bg-sky-500/10 text-sky-400 border border-sky-500/20",
-                              r.voice_part === 'Bass' && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              r.voice_part === 'Bass' && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+                              r.voice_part === 'Instrumentalist' && "bg-purple-500/10 text-purple-400 border border-purple-500/20"
                             )}>
                               {r.voice_part}
                             </span>
@@ -4700,7 +4818,9 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                                   w.voice_part === 'Soprano' ? "bg-rose-500/10 text-rose-500" :
                                     w.voice_part === 'Alto' ? "bg-amber-500/10 text-amber-500" :
                                       w.voice_part === 'Tenor' ? "bg-sky-500/10 text-sky-500" :
-                                        "bg-emerald-500/10 text-emerald-500"
+                                        w.voice_part === 'Bass' ? "bg-emerald-500/10 text-emerald-500" :
+                                          w.voice_part === 'Instrumentalist' ? "bg-purple-500/10 text-purple-500" :
+                                            "bg-indigo-500/10 text-indigo-500"
                                 )}>
                                   {w.voice_part}
                                 </span>
@@ -5130,7 +5250,8 @@ function RosterView() {
                               reg.voice_part === 'Soprano' && "bg-rose-500/10 text-rose-500",
                               reg.voice_part === 'Alto' && "bg-amber-500/10 text-amber-500",
                               reg.voice_part === 'Tenor' && "bg-sky-500/10 text-sky-500",
-                              reg.voice_part === 'Bass' && "bg-emerald-500/10 text-emerald-500"
+                              reg.voice_part === 'Bass' && "bg-emerald-500/10 text-emerald-500",
+                              reg.voice_part === 'Instrumentalist' && "bg-purple-500/10 text-purple-500"
                             )}>
                               {reg.voice_part}
                             </span>
@@ -5709,6 +5830,7 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
               events={attendanceEvents}
               fetchData={fetchPortalData}
               setConfirmModal={setConfirmModal}
+              showDelete={false}
             />
           )}
           {activeTab === 'profile' && <PortalProfileEditor member={member} onUpdate={onLogin} setConfirmModal={setConfirmModal} />}
@@ -5798,6 +5920,23 @@ function PortalDashboard({ member, stats }: any) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+  const [activeSession, setActiveSession] = useState<any>(null);
+
+  const fetchActiveSession = async () => {
+    try {
+      const session = await getCurrentActiveSession(member.id);
+      setActiveSession(session);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    fetchActiveSession();
+    // Re-check periodically
+    const interval = setInterval(fetchActiveSession, 30000);
+    return () => clearInterval(interval);
+  }, [member.id]);
 
   const handleCheckIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -5811,6 +5950,7 @@ function PortalDashboard({ member, stats }: any) {
         await validateAndCheckIn(member.id, code, lat, lng);
         setMessage({ text: 'Check-in successful! Attendance recorded.', type: 'success' });
         setCode('');
+        await fetchActiveSession();
       } catch (err: any) {
         setMessage({ text: err.message || 'Check-in failed.', type: 'error' });
       } finally {
@@ -5834,6 +5974,21 @@ function PortalDashboard({ member, stats }: any) {
       );
     } else {
       performCheckIn();
+    }
+  };
+
+  const handleCheckOut = async () => {
+    if (!activeSession) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      await validateAndCheckOut(activeSession.id, activeSession.attendance_events.start_time, activeSession.attendance_events.date);
+      setMessage({ text: 'Check-out successful! Drive safe.', type: 'success' });
+      await fetchActiveSession();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Check-out failed.', type: 'error' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -5902,60 +6057,108 @@ function PortalDashboard({ member, stats }: any) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* New Attendance Check-in Card */}
+        {/* New Attendance Check-in/Check-out Card */}
         <div className="bg-white/80 dark:bg-[#131521]/80 backdrop-blur-2xl rounded-[2.5rem] p-8 border border-slate-200/50 dark:border-white/5 space-y-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-indigo-500/10 relative overflow-hidden group">
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <div className="relative z-10">
             <div className="flex items-center gap-4 mb-2">
-              <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <CalendarCheck size={24} />
+              <div className={cn(
+                "w-12 h-12 text-white rounded-2xl flex items-center justify-center shadow-lg",
+                activeSession ? "bg-emerald-600 shadow-emerald-500/20" : "bg-indigo-600 shadow-indigo-500/20"
+              )}>
+                {activeSession ? <Check size={24} /> : <CalendarCheck size={24} />}
               </div>
               <div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Live Check-in</h3>
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Enter rehearsal code</p>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                  {activeSession ? 'Active Session' : 'Live Check-in'}
+                </h3>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                  {activeSession ? activeSession.attendance_events?.title : 'Enter rehearsal code'}
+                </p>
               </div>
             </div>
 
-            <form onSubmit={handleCheckIn} className="space-y-4 mt-6">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={code}
-                  onChange={e => setCode(e.target.value.toUpperCase())}
-                  placeholder="0000"
-                  maxLength={6}
-                  className="w-full bg-slate-50/50 dark:bg-black/20 border-2 border-slate-200/50 dark:border-white/5 rounded-2xl px-6 py-5 text-2xl font-black tracking-[0.5em] text-center focus:border-indigo-600 focus:bg-white dark:focus:bg-[#0b0d17] outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-white/5 shadow-inner"
-                />
-                {loading && (
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                    <Loader2 className="animate-spin text-indigo-600" size={20} />
-                  </div>
-                )}
-              </div>
-
-              {message && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className={cn(
-                    "p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border backdrop-blur-sm",
-                    message.type === 'success'
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                      : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+            {!activeSession ? (
+              <form onSubmit={handleCheckIn} className="space-y-4 mt-6">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={e => setCode(e.target.value.toUpperCase())}
+                    placeholder="0000"
+                    maxLength={6}
+                    className="w-full bg-slate-50/50 dark:bg-black/20 border-2 border-slate-200/50 dark:border-white/5 rounded-2xl px-6 py-5 text-2xl font-black tracking-[0.5em] text-center focus:border-indigo-600 focus:bg-white dark:focus:bg-[#0b0d17] outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-white/5 shadow-inner"
+                  />
+                  {loading && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      <Loader2 className="animate-spin text-indigo-600" size={20} />
+                    </div>
                   )}
-                >
-                  {message.text}
-                </motion.div>
-              )}
+                </div>
 
-              <button
-                type="submit"
-                disabled={loading || code.length < 4}
-                className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-xl shadow-indigo-500/20 hover:scale-[1.02] active:scale-98 hover:shadow-indigo-500/40 transition-all disabled:opacity-50"
-              >
-                Confirm Check-in
-              </button>
-            </form>
+                {message && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className={cn(
+                      "p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border backdrop-blur-sm",
+                      message.type === 'success'
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                        : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                    )}
+                  >
+                    {message.text}
+                  </motion.div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading || code.length < 4}
+                  className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-xl shadow-indigo-500/20 hover:scale-[1.02] active:scale-98 hover:shadow-indigo-500/40 transition-all disabled:opacity-50"
+                >
+                  Confirm Check-in
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-4 mt-6">
+                <div className="p-6 bg-slate-50/50 dark:bg-black/20 border border-slate-200/50 dark:border-white/5 rounded-2xl text-center">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1.5">You checked in at</p>
+                  <p className="text-xl font-black text-slate-900 dark:text-white">
+                    {new Date(activeSession.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  {activeSession.is_late && (
+                    <span className="inline-block mt-2 px-2 py-1 bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[9px] font-black uppercase tracking-widest rounded-lg">
+                      Marked Late
+                    </span>
+                  )}
+                </div>
+
+                {message && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className={cn(
+                      "p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border backdrop-blur-sm",
+                      message.type === 'success'
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                        : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                    )}
+                  >
+                    {message.text}
+                  </motion.div>
+                )}
+
+                <button
+                  onClick={handleCheckOut}
+                  disabled={loading}
+                  className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-xl hover:scale-[1.02] active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading && <Loader2 className="animate-spin" size={16} />}
+                  Check Out Now
+                </button>
+                <p className="text-[9px] text-center text-slate-400 italic">Available 1hr 45mins after event start</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -6027,72 +6230,155 @@ function PortalDashboard({ member, stats }: any) {
 
 function PortalHistory({ memberId }: { memberId: string }) {
   const [history, setHistory] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'performance' | 'attendance'>('performance');
 
   useEffect(() => {
-    getMemberHistory(memberId).then(setHistory).finally(() => setLoading(false));
+    Promise.all([
+      getMemberHistory(memberId).then(setHistory),
+      getMemberPortalAttendance(memberId).then(setAttendance)
+    ]).finally(() => setLoading(false));
   }, [memberId]);
 
   if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-indigo-500" size={32} /></div>;
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">Performance History</h2>
-          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Every solo and rehearsal credit</p>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">Portal History</h2>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Your past credits</p>
+        </div>
+        <div className="flex bg-slate-200/50 dark:bg-white/5 p-1 rounded-xl w-max">
+          <button
+            onClick={() => setActiveTab('performance')}
+            className={cn("px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all", activeTab === 'performance' ? "bg-white dark:bg-[#131521] shadow-sm text-indigo-600" : "text-slate-500")}
+          >
+            Performances
+          </button>
+          <button
+            onClick={() => setActiveTab('attendance')}
+            className={cn("px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all", activeTab === 'attendance' ? "bg-white dark:bg-[#131521] shadow-sm text-indigo-600" : "text-slate-500")}
+          >
+            Attendance
+          </button>
         </div>
       </div>
 
       <div className="bg-white dark:bg-[#131521] rounded-[3rem] border border-slate-200 dark:border-white/5 overflow-hidden shadow-xl">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 dark:bg-[#0b0d17] border-b border-slate-200 dark:border-white/5">
-            <tr>
-              <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Date / event</th>
-              <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Solo Details</th>
-              <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-right text-slate-400">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-            {history.length > 0 ? history.map((h: any) => (
-              <tr key={h.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
-                <td className="px-10 py-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
-                      <Music size={18} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">Week {new Date(h.created_at).toLocaleDateString()}</p>
-                      <p className="text-[10px] text-slate-500 uppercase font-black">Slot S-{h.slot_id}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-10 py-6">
-                  {h.repertoire_submissions?.map((rep: any) => (
-                    <div key={rep.id} className="space-y-1">
-                      <p className="text-xs font-black text-slate-800 dark:text-slate-200">{rep.song_title}</p>
-                      <p className="text-[10px] text-slate-500 uppercase tracking-widest">{rep.artist_composer}</p>
-                    </div>
-                  )) || <span className="text-xs italic text-slate-400">No songs recorded</span>}
-                </td>
-                <td className="px-10 py-6 text-right">
-                  <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-black uppercase tracking-widest">
-                    Completed
-                  </span>
-                </td>
-              </tr>
-            )) : (
+        {activeTab === 'performance' ? (
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 dark:bg-[#0b0d17] border-b border-slate-200 dark:border-white/5">
               <tr>
-                <td colSpan={3} className="px-10 py-20 text-center">
-                  <div className="max-w-xs mx-auto space-y-4">
-                    <History size={48} className="mx-auto text-slate-200 dark:text-white/10" />
-                    <p className="text-xs text-slate-500 font-black uppercase tracking-widest">No history recorded yet</p>
-                  </div>
-                </td>
+                <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Date / event</th>
+                <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Solo Details</th>
+                <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-right text-slate-400">Status</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+              {history.length > 0 ? history.map((h: any) => (
+                <tr key={h.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                  <td className="px-10 py-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
+                        <Music size={18} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">Week {new Date(h.created_at).toLocaleDateString()}</p>
+                        <p className="text-[10px] text-slate-500 uppercase font-black">Slot S-{h.slot_id}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-10 py-6">
+                    {h.repertoire_submissions?.map((rep: any) => (
+                      <div key={rep.id} className="space-y-1">
+                        <p className="text-xs font-black text-slate-800 dark:text-slate-200">{rep.song_title}</p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-widest">{rep.artist_composer}</p>
+                      </div>
+                    )) || <span className="text-xs italic text-slate-400">No songs recorded</span>}
+                  </td>
+                  <td className="px-10 py-6 text-right">
+                    <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                      Completed
+                    </span>
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={3} className="px-10 py-20 text-center">
+                    <div className="max-w-xs mx-auto space-y-4">
+                      <History size={48} className="mx-auto text-slate-200 dark:text-white/10" />
+                      <p className="text-xs text-slate-500 font-black uppercase tracking-widest">No history recorded yet</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        ) : (
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 dark:bg-[#0b0d17] border-b border-slate-200 dark:border-white/5">
+              <tr>
+                <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Date / Event</th>
+                <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Check In</th>
+                <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Check Out</th>
+                <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-right text-slate-400">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+              {attendance.length > 0 ? attendance.map((a: any) => (
+                <tr key={a.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                  <td className="px-10 py-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
+                        <CalendarCheck size={18} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">{a.attendance_events?.title || 'Unknown Event'}</p>
+                        <p className="text-[10px] text-slate-500 uppercase font-black">{new Date(a.attendance_events?.date || a.check_in_time).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-10 py-6">
+                    <p className="text-xs font-black text-slate-800 dark:text-slate-200">
+                      {new Date(a.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </td>
+                  <td className="px-10 py-6">
+                    {a.check_out_time ? (
+                      <p className="text-xs font-black text-slate-800 dark:text-slate-200">
+                        {new Date(a.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    ) : (
+                      <span className="text-xs italic text-slate-400">Pending</span>
+                    )}
+                  </td>
+                  <td className="px-10 py-6 text-right">
+                    {a.is_late ? (
+                      <span className="px-3 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg text-[9px] font-black uppercase tracking-widest inline-flex items-center gap-1">
+                        <AlertCircle size={10} /> Late
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[9px] font-black uppercase tracking-widest inline-flex items-center gap-1">
+                        <Check size={10} /> On Time
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={4} className="px-10 py-20 text-center">
+                    <div className="max-w-xs mx-auto space-y-4">
+                      <Activity size={48} className="mx-auto text-slate-200 dark:text-white/10" />
+                      <p className="text-xs text-slate-500 font-black uppercase tracking-widest">No attendance records yet</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

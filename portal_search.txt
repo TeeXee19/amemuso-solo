@@ -1,0 +1,403 @@
+5-import { supabase, isSupabaseConfigured } from './lib/supabase';
+6-import {
+7-  getConfigs, getRegistrations, registerSoloist, updateMaxSlots, updateConfig, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires, updatePerformanceStatus, resetPerformanceStatus,
+8-  getPerformanceWeeks,
+9-  getWaitlist, joinWaitlist, deleteWaitlistEntry, getAdminUser,
+10:  getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers, uploadMemberPhoto, getMemberByPortalId,
+11-  getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory,
+12-  getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, getMemberAttendanceStats, validateAndCheckIn, autoExpireEvents, calculateHonorarium
+13-} from './lib/db';
+14-import {
+15-  ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
+--
+109-    youtube: '',
+110-    instagram: '',
+111-    facebook: '',
+112-    twitter: '',
+113-    tiktok: '',
+114:    portal_id: '',
+115:    portal_pin: ''
+116-  });
+117-
+118-  const [activeTab, setActiveTab] = useState<'personal' | 'org' | 'access'>('personal');
+119-  const [uploading, setUploading] = useState(false);
+120-
+--
+140-        youtube: member.youtube || '',
+141-        instagram: member.instagram || '',
+142-        facebook: member.facebook || '',
+143-        twitter: member.twitter || '',
+144-        tiktok: member.tiktok || '',
+145:        portal_id: member.portal_id || '',
+146:        portal_pin: member.portal_pin || ''
+147-      });
+148-    } else {
+149-      setForm({
+150-        full_name: '',
+151-        voice_part: 'Soprano',
+--
+162-        youtube: '',
+163-        instagram: '',
+164-        facebook: '',
+165-        twitter: '',
+166-        tiktok: '',
+167:        portal_id: '',
+168:        portal_pin: ''
+169-      });
+170-    }
+171-  }, [member, isOpen]);
+172-
+173-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+--
+491-                  <div className="flex items-center gap-3">
+492-                    <div className="w-10 h-10 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-500">
+493-                      <Lock size={20} />
+494-                    </div>
+495-                    <div className="space-y-1">
+496:                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Secure Portal Credentials</h4>
+497-                      <p className="text-[10px] text-slate-500 italic">Used by member to log into their private dashboard</p>
+498-                    </div>
+499-                  </div>
+500-
+501-                  <div className="grid grid-cols-2 gap-6">
+502-                    <div className="space-y-1.5">
+503-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Member Unique Code</label>
+504-                      <input
+505:                        value={form.portal_id}
+506:                        onChange={e => setForm({ ...form, portal_id: e.target.value })}
+507-                        className="w-full bg-white dark:bg-[#131521] border border-emerald-500/20 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none uppercase font-bold tracking-wider"
+508-                        placeholder="M-01"
+509-                      />
+510-                    </div>
+511-                    <div className="space-y-1.5">
+512-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Private Security PIN</label>
+513-                      <input
+514:                        value={form.portal_pin}
+515:                        onChange={e => setForm({ ...form, portal_pin: e.target.value })}
+516-                        maxLength={4}
+517-                        className="w-full bg-white dark:bg-[#131521] border border-emerald-500/20 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-center font-black tracking-[0.4em]"
+518-                        placeholder="••••"
+519-                      />
+520-                    </div>
+--
+1040-              )}
+1041-            >
+1042-              Roster
+1043-            </button>
+1044-            <button
+1045:              onClick={() => navigate('/portal')}
+1046-              className={cn(
+1047-                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20",
+1048:                location.pathname.startsWith('/portal') && "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+1049-              )}
+1050-            >
+1051:              <Users size={14} /> Member Portal
+1052-            </button>
+1053-          </div>
+1054-
+1055-          {/* User Nav (Only show in header if no sidebar) */}
+1056-          {isAuthenticated && !sidebar && (
+--
+1103-                    className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
+1104-                  >
+1105-                    Roster
+1106-                  </button>
+1107-                  <button
+1108:                    onClick={() => { setIsMobileMenuOpen(false); navigate('/portal'); }}
+1109:                    className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left flex items-center gap-3", location.pathname.startsWith('/portal') ? "bg-indigo-600 text-white" : "bg-indigo-500/10 text-indigo-600")}
+1110-                  >
+1111:                    <Users size={18} /> Member Portal
+1112-                  </button>
+1113-                  <button
+1114-                    onClick={() => { setIsMobileMenuOpen(false); navigate('/members'); }}
+1115-                    className={cn("px-4 py-3 rounded-xl text-sm font-bold transition-all text-left", location.pathname === '/members' ? "bg-indigo-600 text-white" : "bg-slate-50 dark:bg-[#0b0d17] text-slate-700 dark:text-slate-300")}
+1116-                  >
+--
+3405-              <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-white/5">
+3406-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Edit MD Feedback</label>
+3407-                <textarea
+3408-                  value={feedback}
+3409-                  onChange={e => setFeedback(e.target.value)}
+3410:                  placeholder="Type feedback here to save to the member's portal history..."
+3411-                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl p-4 text-sm focus:border-indigo-500 outline-none resize-none"
+3412-                  rows={4}
+3413-                />
+3414-                <div className="flex gap-3 justify-end">
+3415-                  <button onClick={() => setEditingId(null)} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5">Cancel</button>
+--
+3949-        position_id: form.position_id || null,
+3950-        probation_until: form.probation_until || null,
+3951-        joined_at: form.joined_at || null,
+3952-        email: form.email || null,
+3953-        phone: form.phone || null,
+3954:        portal_id: form.portal_id?.trim().toUpperCase() || null,
+3955:        portal_pin: form.portal_pin?.trim() || null
+3956-      };
+3957-
+3958-      if (editingMember) {
+3959-        await updateMember(editingMember.id, sanitizedForm);
+3960-      } else {
+--
+5604-  );
+5605-}
+5606-
+5607-// --- Main App Entry ---
+5608-
+5609:// --- Member Portal View (Phase 6) ---
+5610-
+5611:function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
+5612-  const [activeTab, setActiveTab] = useState('dashboard');
+5613-  const [loading, setLoading] = useState(false);
+5614-  const [error, setError] = useState('');
+5615-  const [memberStats, setMemberStats] = useState<any>(null);
+5616-  const [attendanceEvents, setAttendanceEvents] = useState<any[]>([]);
+5617-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+5618-
+5619-  const isProvost = member?.member_positions?.title?.toLowerCase() === 'provost';
+5620-
+5621:  const fetchPortalData = async () => {
+5622-    if (member) {
+5623-      getMemberAttendanceStats(member.id).then(setMemberStats).catch(console.error);
+5624-      if (isProvost) {
+5625-        getAttendanceEvents().then(setAttendanceEvents).catch(console.error);
+5626-      }
+5627-    }
+5628-  };
+5629-
+5630-  useEffect(() => {
+5631:    fetchPortalData();
+5632-  }, [member]);
+5633-
+5634:  const handleLoginSubmit = async (portalId: string, pin: string) => {
+5635-    setLoading(true);
+5636-    setError('');
+5637-    try {
+5638:      const data = await getMemberByPortalId(portalId);
+5639:      if (!data || data.portal_pin !== pin) {
+5640-        throw new Error('Invalid Member Code or PIN');
+5641-      }
+5642-      onLogin(data);
+5643-    } catch (err: any) {
+5644-      setError(err.message || 'Login failed');
+--
+5646-      setLoading(false);
+5647-    }
+5648-  };
+5649-
+5650-  if (!member) {
+5651:    return <PortalLogin onLogin={handleLoginSubmit} loading={loading} error={error} />;
+5652-  }
+5653-
+5654-  return (
+5655:    <div className="font-portal min-h-screen bg-[#F8FAFC] dark:bg-[#0b0d17] text-slate-900 dark:text-white">
+5656-      {/* Mobile Overlay */}
+5657-      {isMobileMenuOpen && (
+5658-        <div
+5659-          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm"
+5660-          onClick={() => setIsMobileMenuOpen(false)}
+5661-        />
+5662-      )}
+5663-
+5664:      {/* Sidebar for Portal */}
+5665-      <div className={cn(
+5666-        "fixed left-0 top-0 bottom-0 w-72 bg-white dark:bg-[#131521] border-r border-slate-200 dark:border-white/5 z-50 transition-transform duration-300",
+5667-        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+5668-      )}>
+5669-        <div className="p-8 pb-4">
+5670-          <div className="flex items-center gap-3 mb-12">
+5671-            <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-500/20">
+5672-              <Users size={20} />
+5673-            </div>
+5674-            <div>
+5675:              <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest italic">Member Portal</h2>
+5676-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-none mt-1">Amemuso Compulsory Recital System</p>
+5677-            </div>
+5678-          </div>
+5679-
+5680-          <div className="space-y-2">
+--
+5698-                )}
+5699-              >
+5700-                <item.icon size={18} />
+5701-                <span className="text-xs font-black uppercase tracking-widest">{item.label}</span>
+5702-                {activeTab === item.id && (
+5703:                  <motion.div layoutId="portal-active" className="absolute left-0 w-1.5 h-6 bg-white rounded-r-full" />
+5704-                )}
+5705-              </button>
+5706-            ))}
+5707-          </div>
+5708-        </div>
+--
+5730-            <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-white/10 hidden sm:block">
+5731-              <img src={member.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(member.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`} alt="" className="w-full h-full object-cover" />
+5732-            </div>
+5733-            <div>
+5734-              <h2 className="text-sm lg:text-lg font-black text-slate-900 dark:text-white leading-tight">{member.full_name}</h2>
+5735:              <p className="text-[9px] lg:text-[10px] text-slate-500 font-bold uppercase tracking-widest">{member.voice_part} • {member.portal_id}</p>
+5736-            </div>
+5737-          </div>
+5738-
+5739-          <Link to="/" className="px-4 py-2 lg:px-6 lg:py-3 bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 font-black text-[9px] lg:text-[10px] uppercase tracking-widest rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all active:scale-95">
+5740-            Public View
+5741-          </Link>
+5742-        </header>
+5743-
+5744-        <main className="p-4 lg:p-12">
+5745:          {activeTab === 'dashboard' && <PortalDashboard member={member} stats={memberStats} />}
+5746:          {activeTab === 'history' && <PortalHistory memberId={member.id} />}
+5747-          {isProvost && activeTab === 'attendance' && (
+5748-            <AttendanceManagement
+5749-              events={attendanceEvents}
+5750:              fetchData={fetchPortalData}
+5751-              setConfirmModal={setConfirmModal}
+5752-              showDelete={false}
+5753-            />
+5754-          )}
+5755:          {activeTab === 'profile' && <PortalProfileEditor member={member} onUpdate={onLogin} setConfirmModal={setConfirmModal} />}
+5756-        </main>
+5757-      </div>
+5758-    </div>
+5759-  );
+5760-}
+5761-
+5762:function PortalLogin({ onLogin, loading, error }: any) {
+5763:  const [portalId, setPortalId] = useState('');
+5764-  const [pin, setPin] = useState('');
+5765-
+5766-  return (
+5767:    <div className="font-portal min-h-screen bg-[#F8FAFC] dark:bg-[#0b0d17] flex items-center justify-center p-6 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent">
+5768-      <motion.div
+5769-        initial={{ opacity: 0, scale: 0.95 }}
+5770-        animate={{ opacity: 1, scale: 1 }}
+5771-        className="w-full max-w-md bg-white dark:bg-[#131521] rounded-[3rem] shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden"
+5772-      >
+5773-        <div className="p-10 space-y-8">
+5774-          <div className="text-center space-y-2">
+5775-            <div className="w-16 h-16 bg-indigo-600 rounded-[1.5rem] flex items-center justify-center text-white shadow-xl shadow-indigo-500/20 mx-auto mb-6">
+5776-              <Lock size={32} />
+5777-            </div>
+5778:            <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">Member Portal</h2>
+5779-            <p className="text-xs text-slate-500 font-bold uppercase tracking-[0.2em]">Secure Private Access</p>
+5780-          </div>
+5781-
+5782:          <form onSubmit={e => { e.preventDefault(); onLogin(portalId, pin); }} className="space-y-6">
+5783-            <div className="space-y-4">
+5784-              <div>
+5785-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Member Code</label>
+5786-                <div className="relative">
+5787-                  <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+5788-                  <input
+5789:                    value={portalId}
+5790:                    onChange={e => setPortalId(e.target.value)}
+5791-                    className="w-full text-black dark:text-white bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm focus:border-indigo-500 outline-none uppercase font-bold tracking-widest"
+5792-                    placeholder="E.G. M-01"
+5793-                  />
+5794-                </div>
+5795-              </div>
+--
+5815-              </motion.p>
+5816-            )}
+5817-
+5818-            <button
+5819-              type="submit"
+5820:              disabled={loading || !portalId || !pin}
+5821-              className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-xl shadow-indigo-500/20 hover:scale-[1.02] active:scale-98 transition-all disabled:opacity-50"
+5822-            >
+5823:              {loading ? <Loader2 className="animate-spin mx-auto" size={18} /> : 'Login to Portal'}
+5824-            </button>
+5825-          </form>
+5826-
+5827-          <div className="pt-6 border-t border-slate-100 dark:border-white/5 text-center">
+5828-            <Link to="/" className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-500 transition-colors">
+--
+5833-      </motion.div>
+5834-    </div>
+5835-  );
+5836-}
+5837-
+5838:function PortalDashboard({ member, stats }: any) {
+5839-  const [code, setCode] = useState('');
+5840-  const [loading, setLoading] = useState(false);
+5841-  const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+5842-
+5843-  const handleCheckIn = async (e: React.FormEvent) => {
+--
+5887-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none"></div>
+5888-
+5889-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-10">
+5890-          <div className="space-y-5">
+5891-            <div>
+5892:              <p className="text-indigo-300 text-xs font-bold uppercase tracking-[0.3em] mb-2 selection:bg-white/20">Member Portal</p>
+5893-              <h1 className="text-4xl sm:text-5xl font-black uppercase tracking-tight leading-none">
+5894-                Welcome Back,<br />
+5895-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-100 to-indigo-300">
+5896-                  {member.full_name}
+5897-                </span>
+--
+6064-      </div>
+6065-    </div>
+6066-  );
+6067-}
+6068-
+6069:function PortalHistory({ memberId }: { memberId: string }) {
+6070-  const [history, setHistory] = useState<any[]>([]);
+6071-  const [loading, setLoading] = useState(true);
+6072-
+6073-  useEffect(() => {
+6074-    getMemberHistory(memberId).then(setHistory).finally(() => setLoading(false));
+--
+6137-      </div>
+6138-    </div>
+6139-  );
+6140-}
+6141-
+6142:function PortalProfileEditor({ member, onUpdate }: any) {
+6143-  const [form, setForm] = useState(member);
+6144-  const [saving, setSaving] = useState(false);
+6145-  const [uploading, setUploading] = useState(false);
+6146-  const [success, setSuccess] = useState(false);
+6147-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+--
+6368-
+6369-export default function App() {
+6370-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+6371-    return localStorage.getItem('is-admin-authenticated') === 'true';
+6372-  });
+6373:  const [portalMember, setPortalMember] = useState<any>(() => {
+6374:    const saved = localStorage.getItem('portal-member');
+6375-    return saved ? JSON.parse(saved) : null;
+6376-  });
+6377-  const [hasError, setHasError] = useState(false);
+6378-
+6379-  useEffect(() => {
+--
+6395-  const handleLogout = () => {
+6396-    setIsAuthenticated(false);
+6397-    localStorage.removeItem('is-admin-authenticated');
+6398-  };
+6399-
+6400:  const handlePortalLogin = (member: any) => {
+6401:    setPortalMember(member);
+6402:    localStorage.setItem('portal-member', JSON.stringify(member));
+6403-  };
+6404-
+6405:  const handlePortalLogout = () => {
+6406:    setPortalMember(null);
+6407:    localStorage.removeItem('portal-member');
+6408-  };
+6409-
+6410-  if (!isSupabaseConfigured) {
+6411-    return <PublicView setConfirmModal={() => { }} />;
+6412-  }
+--
+6432-        <Route
+6433-          path="/admin"
+6434-          element={isAuthenticated ? <AdminView onLogout={handleLogout} setConfirmModal={setConfirmModal} /> : <Navigate to="/login" replace />}
+6435-        />
+6436-        <Route path="/login" element={<LoginView onLogin={handleLogin} />} />
+6437:        <Route path="/portal" element={<MemberPortalView member={portalMember} onLogin={handlePortalLogin} onLogout={handlePortalLogout} setConfirmModal={setConfirmModal} />} />
+6438-        <Route path="/" element={<RosterView />} />
+6439-        <Route path="/repertoire" element={<SongEntryView setConfirmModal={setConfirmModal} />} />
+6440-      </Routes>
+6441-      <AnimatePresence>
+6442-        <ConfirmModal
