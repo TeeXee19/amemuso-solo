@@ -5863,14 +5863,14 @@ function PortalLogin({ onLogin, loading, error }: any) {
           <form onSubmit={e => { e.preventDefault(); onLogin(portalId, pin); }} className="space-y-6">
             <div className="space-y-4">
               <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Member Code</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Username</label>
                 <div className="relative">
                   <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input
                     value={portalId}
                     onChange={e => setPortalId(e.target.value)}
                     className="w-full text-black dark:text-white bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm focus:border-indigo-500 outline-none uppercase font-bold tracking-widest"
-                    placeholder="E.G. M-01"
+                    placeholder="Your Username"
                   />
                 </div>
               </div>
@@ -6412,7 +6412,8 @@ function PortalProfileEditor({ member, onUpdate }: any) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const data = await updateMember(member.id, form);
+      const { member_positions, ...sanitizedForm } = form;
+      const data = await updateMember(member.id, sanitizedForm);
       onUpdate(data[0]);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
