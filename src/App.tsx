@@ -16,7 +16,7 @@ import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
   Users, Trash2, Loader2, X, Check, Music, Sun, Monitor, Moon, Edit2, Plus, Camera,
   Calendar, Briefcase, History, Archive, Youtube, Instagram, Facebook, Twitter, Video, CalendarCheck,
-  LogOut, CheckSquare, Lock, Trophy, User, ShieldCheck, ShieldAlert, Share2, Mail, Phone as PhoneIcon, Save, MapPin, Upload, AlertCircle, MessageSquareHeart, Edit3
+  LogOut, CheckSquare, Lock, Trophy, User, ShieldCheck, ShieldAlert, Share2, Mail, Phone as PhoneIcon, Save, MapPin, Upload, AlertCircle, MessageSquareHeart, Edit3, Filter
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -871,6 +871,7 @@ function AdminSidebar({ activeTab, setActiveTab, repertoires, waitlist, onLogout
     { id: 'checkin', label: 'Check-in', icon: Check, color: 'text-emerald-500' },
     { id: 'attendance', label: 'Attendance', icon: CalendarCheck, color: 'text-indigo-500' },
     { id: 'members', label: 'Member Management', icon: Grid },
+    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, color: 'text-amber-500' },
     { id: 'repertoire', label: 'Song Approvals', icon: Music, badge: repertoires.filter((s: any) => s.status === 'pending').length },
     { id: 'waitlist', label: 'Waitlist', icon: History, badge: waitlist.length },
     { id: 'analytics', label: 'Analytics', icon: Activity },
@@ -4194,30 +4195,38 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
             className="space-y-8"
           >
             {/* Contextual Header Section */}
+            {/* Contextual Header Section */}
             {(activeTab === 'list' || activeTab === 'members' || activeTab === 'repertoire' || activeTab === 'archives') && (
-              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-white dark:bg-[#131521]/40 p-6 rounded-[2rem] border border-slate-200 dark:border-white/5 backdrop-blur-sm shadow-xl shadow-black/5">
-                <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 bg-white dark:bg-[#131521]/40 p-6 rounded-[2rem] border border-slate-200 dark:border-white/5 backdrop-blur-sm shadow-xl shadow-black/5">
+                <div className="flex flex-col sm:flex-row flex-wrap gap-4 w-full lg:w-auto items-center">
                   {activeTab === 'members' && (
                     <>
                       <button
                         onClick={handleImportMembers}
                         disabled={bulkActionLoading}
-                        className="flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
+                        className="flex-shrink-0 flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
                       >
                         {bulkActionLoading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
                         Import Registered
                       </button>
-                      <div className="flex bg-slate-50 dark:bg-[#0b0d17] p-1 rounded-xl border border-slate-200 dark:border-white/5">
+                      <div className="flex-shrink-0 flex bg-slate-100/80 dark:bg-[#0b0d17]/80 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/80 dark:border-white/10 shadow-inner max-w-full overflow-x-auto">
+                        <div className="px-3 hidden sm:flex items-center text-[9px] font-black uppercase tracking-widest text-slate-400">
+                          <Filter size={12} className="mr-1.5" /> Filter
+                        </div>
+                        <div className="w-px h-6 bg-slate-200 dark:bg-white/10 mx-1 hidden sm:block" />
                         {['All', ...VOICE_PARTS].map(p => (
                           <button
                             key={p}
                             onClick={() => setMemberVoiceFilter(p)}
                             className={cn(
-                              "px-4 py-2 flex-1 sm:flex-none rounded-lg text-xs font-bold transition-all",
-                              memberVoiceFilter === p ? "bg-indigo-600 text-white shadow-lg glow-indigo" : "text-slate-500 hover:text-slate-900 dark:text-white"
+                              "px-4 py-2 flex-shrink-0 sm:flex-none rounded-xl text-xs font-bold transition-all relative overflow-hidden group",
+                              memberVoiceFilter === p ? "text-white shadow-md shadow-indigo-500/20" : "text-slate-500 hover:text-slate-900 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-white/5"
                             )}
                           >
-                            {p}
+                            {memberVoiceFilter === p && (
+                              <div className="absolute inset-0 bg-indigo-600 rounded-xl -z-10" />
+                            )}
+                            <span className="relative z-10">{p === 'Instrumentalist' ? 'Inst.' : p}</span>
                           </button>
                         ))}
                       </div>
@@ -4264,8 +4273,8 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                     </div>
                   )}
                 </div>
-                <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto items-center">
-                  <div className="relative w-full md:w-64">
+                <div className="flex flex-col sm:flex-row flex-wrap gap-4 w-full lg:w-auto items-center lg:justify-end">
+                  <div className="relative w-full sm:w-64">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
                     <input
                       placeholder={activeTab === 'members' ? "Search members..." : activeTab === 'list' ? "Search name..." : "Search song..."}
@@ -4275,23 +4284,23 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                     />
                   </div>
                   {activeTab === 'members' && (
-                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                    <div className="flex flex-row flex-wrap justify-end gap-3 w-full sm:w-auto">
                       <a
                         href="/solo_members_template.csv"
                         download="solo_members_template.csv"
-                        className="w-full sm:w-auto flex justify-center items-center gap-2 px-6 py-3 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
+                        className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-6 py-3 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
                       >
                         <Download size={16} /> Template
                       </a>
                       <button
                         onClick={handleExportDirectoryCSV}
-                        className="w-full sm:w-auto flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
+                        className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
                       >
                         <Download size={16} /> Export CSV
                       </button>
                       <button
                         onClick={() => setIsImportModalOpen(true)}
-                        className="w-full sm:w-auto flex justify-center items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl text-sm font-bold transition-all whitespace-nowrap hover:scale-105 active:scale-95 shadow-xl shadow-slate-900/10 dark:shadow-white/10"
+                        className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl text-sm font-bold transition-all whitespace-nowrap hover:scale-105 active:scale-95 shadow-xl shadow-slate-900/10 dark:shadow-white/10"
                       >
                         <Upload size={16} /> Import CSV
                       </button>
@@ -4300,7 +4309,7 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                           setEditingMember(null);
                           setIsMemberModalOpen(true);
                         }}
-                        className="w-full sm:w-auto flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-sm font-bold transition-all whitespace-nowrap shadow-xl shadow-emerald-500/20 hover:scale-105 active:scale-95"
+                        className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-sm font-bold transition-all whitespace-nowrap shadow-xl shadow-emerald-500/20 flex-shrink-0"
                       >
                         <Plus size={16} /> Add Member
                       </button>
@@ -4311,7 +4320,7 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
             )}
 
             {/* Gamification Leaderboard */}
-            {(activeTab === 'list' || activeTab === 'members') && (
+            {activeTab === 'leaderboard' && (
               <div className="mb-6">
                 <VoicePartLeaderboard />
               </div>
@@ -5157,7 +5166,7 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                   </div>
                 )}
               </div>
-            ) : (
+            ) : activeTab === 'settings' ? (
               <div className="max-w-md space-y-10 py-10">
                 <div className="space-y-4">
                   <div className="flex items-center gap-3 mb-2">
@@ -5197,7 +5206,7 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                   <PositionManager positions={positions} onRefresh={fetchData} setConfirmModal={setConfirmModal} />
                 </div>
               </div>
-            )}
+            ) : null}
           </motion.div>
         </AnimatePresence>
 
@@ -5810,6 +5819,7 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
           <div className="space-y-2">
             {[
               { id: 'dashboard', label: 'Dashboard', icon: Grid },
+              { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
               { id: 'history', label: 'My History', icon: History },
               isProvost && { id: 'attendance', label: 'Attendance', icon: CalendarCheck },
               { id: 'profile', label: 'Manage Profile', icon: Edit2 }
@@ -5873,6 +5883,7 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
 
         <main className="p-4 lg:p-12">
           {activeTab === 'dashboard' && <PortalDashboard member={member} stats={memberStats} />}
+          {activeTab === 'leaderboard' && <VoicePartLeaderboard />}
           {activeTab === 'history' && <PortalHistory memberId={member.id} />}
           {isProvost && activeTab === 'attendance' && (
             <AttendanceManagement
@@ -6343,10 +6354,6 @@ function PortalDashboard({ member, stats }: any) {
           </div>
         </div>
 
-        {/* Gamification Leaderboard */}
-        <div className="lg:col-span-2">
-          <VoicePartLeaderboard />
-        </div>
       </div>
     </div>
   );
