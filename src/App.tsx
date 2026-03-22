@@ -5801,7 +5801,7 @@ function MemberPortalView({ member, onLogin, onLogout, onUpdate, setConfirmModal
   const [memberStats, setMemberStats] = useState<any>(null);
   const [attendanceEvents, setAttendanceEvents] = useState<any[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [showWalkthrough, setShowWalkthrough] = useState(!member.has_seen_walkthrough);
+  const [showWalkthrough, setShowWalkthrough] = useState(member ? !member.has_seen_walkthrough : false);
 
   const handleWalkthroughComplete = async () => {
     try {
