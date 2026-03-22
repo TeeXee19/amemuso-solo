@@ -7,14 +7,14 @@ import {
   getConfigs, getRegistrations, registerSoloist, updateMaxSlots, updateConfig, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires, updatePerformanceStatus, resetPerformanceStatus,
   getPerformanceWeeks,
   getWaitlist, joinWaitlist, deleteWaitlistEntry,
-  getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers, uploadMemberPhoto,
+  getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers,
   getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory,
   getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, getMemberAttendanceStats, validateAndCheckIn, autoExpireEvents, calculateHonorarium,
   validateAndCheckOut, adminCheckOutMember, getMemberPortalAttendance, getCurrentActiveSession, verifyMemberLogin, secureUpdateMemberProfile
 } from './lib/db';
 import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
-  Users, Trash2, Loader2, X, Check, Music, Sun, Monitor, Moon, Edit2, Plus, Camera,
+  Users, Trash2, Loader2, X, Check, Music, Sun, Monitor, Moon, Edit2, Plus,
   Calendar, Briefcase, History, Archive, Youtube, Instagram, Facebook, Twitter, Video, CalendarCheck,
   LogOut, CheckSquare, Lock, Trophy, User, ShieldCheck, ShieldAlert, Share2, Mail, Phone as PhoneIcon, Save, MapPin, Upload, AlertCircle, MessageSquareHeart, Edit3, Filter
 } from 'lucide-react';
@@ -93,7 +93,7 @@ function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading, ico
   );
 }
 
-function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, loading, positions = [], setConfirmModal }: any) {
+function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, loading, positions = [] }: any) {
   const [form, setForm] = useState({
     full_name: '',
     voice_part: 'Soprano',
@@ -117,7 +117,6 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
   });
 
   const [activeTab, setActiveTab] = useState<'personal' | 'org' | 'access'>('personal');
-  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (isOpen) setActiveTab('personal');
@@ -171,30 +170,7 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
     }
   }, [member, isOpen]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    setUploading(true);
-    try {
-      const url = await uploadMemberPhoto(file);
-      setForm(prev => ({ ...prev, photo_url: url }));
-    } catch (err: any) {
-      console.error(err);
-      setConfirmModal({
-        isOpen: true,
-        title: "Upload Failed",
-        message: "Upload failed: " + (err.message || "Unknown error"),
-        icon: ShieldAlert,
-        confirmText: "Close",
-        color: "bg-slate-600",
-        hideCancel: true,
-        onConfirm: () => { }
-      });
-    } finally {
-      setUploading(false);
-    }
-  };
 
   if (!isOpen) return null;
 
@@ -258,43 +234,30 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
                 className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4"
               >
                 <div className="space-y-6">
+                <div className="space-y-4">
                   <div className="flex flex-col items-center gap-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block self-start">Profile Photo</label>
-                    <div className="relative group w-full aspect-square max-w-[240px] rounded-3xl overflow-hidden bg-slate-50 dark:bg-[#0b0d17] border-2 border-dashed border-slate-200 dark:border-white/10 flex flex-col items-center justify-center text-center p-4 transition-all hover:border-indigo-500/50">
-                      {form.photo_url || uploading ? (
-                        <>
-                          {uploading ? (
-                            <div className="absolute inset-0 z-10 bg-white/80 dark:bg-black/80 flex items-center justify-center">
-                              <Loader2 className="animate-spin text-indigo-500" size={32} />
-                            </div>
-                          ) : null}
-                          <img
-                            src={form.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(form.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`}
-                            alt=""
-                            className="w-full h-full object-cover rounded-2xl"
-                          />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <button className="p-3 bg-white/20 backdrop-blur-md rounded-2xl text-white font-bold text-xs flex items-center gap-2">
-                              <Camera size={14} /> Change Photo
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="space-y-3">
-                          <div className="w-12 h-12 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto">
-                            <Camera size={24} />
-                          </div>
-                          <p className="text-xs text-slate-500 font-bold">Click to upload photo</p>
-                        </div>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileChange}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block self-start">Profile Photo Preview</label>
+                    <div className="relative group w-full aspect-square max-w-[180px] rounded-3xl overflow-hidden bg-slate-50 dark:bg-[#0b0d17] border-2 border-slate-200 dark:border-white/10 transition-all">
+                      <img
+                        src={form.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(form.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`}
+                        alt=""
+                        className="w-full h-full object-cover rounded-2xl"
                       />
                     </div>
                   </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Avatar URL</label>
+                    <div className="relative">
+                      <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input
+                        value={form.photo_url}
+                        onChange={e => setForm({ ...form, photo_url: e.target.value })}
+                        className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all placeholder:opacity-50"
+                        placeholder="https://example.com/photo.jpg"
+                      />
+                    </div>
+                  </div>
+                </div>
                 </div>
 
                 <div className="space-y-4">
@@ -6515,27 +6478,7 @@ function PortalHistory({ memberId }: { memberId: string }) {
 function PortalProfileEditor({ member, onUpdate }: any) {
   const [form, setForm] = useState(member);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    try {
-      const publicUrl = await uploadMemberPhoto(file);
-      setForm((prev: any) => ({ ...prev, photo_url: publicUrl }));
-      // Automatically save the photo update
-      const data = await secureUpdateMemberProfile(member.portal_id, member.portal_pin, { photo_url: publicUrl });
-      onUpdate(data);
-    } catch (err) {
-      console.error("Photo upload failed:", err);
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -6571,20 +6514,7 @@ function PortalProfileEditor({ member, onUpdate }: any) {
                 className="w-full h-full object-cover"
                 alt="Profile"
               />
-              {uploading && (
-                <div className="absolute inset-0 bg-white/80 dark:bg-[#0b0d17]/80 backdrop-blur-sm flex items-center justify-center">
-                  <Loader2 className="animate-spin text-indigo-600" size={28} />
-                </div>
-              )}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute inset-0 bg-indigo-600/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white backdrop-blur-sm cursor-pointer"
-              >
-                <Camera size={26} className="mb-1" />
-                <span className="text-[9px] font-black uppercase tracking-widest">Change</span>
-              </button>
             </div>
-            <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} accept="image/*" className="hidden" />
           </div>
           <div className="flex-1 space-y-3 text-center sm:text-left">
             <h3 className="text-2xl font-black text-slate-900 dark:text-white">{form.full_name}</h3>
@@ -6593,7 +6523,7 @@ function PortalProfileEditor({ member, onUpdate }: any) {
               {form.is_soloist && <span className="px-3 py-1 bg-amber-500/10 text-amber-500 rounded-lg text-[10px] font-black uppercase tracking-widest">Soloist</span>}
               {form.is_on_probation && <span className="px-3 py-1 bg-rose-500/10 text-rose-500 rounded-lg text-[10px] font-black uppercase tracking-widest">On Probation</span>}
             </div>
-            <p className="text-xs text-slate-400 leading-relaxed">Hover your photo to update it. Voice part requires admin to change.</p>
+            <p className="text-xs text-slate-400 leading-relaxed">Update your photo URL below to change your avatar. Voice part requires admin to change.</p>
           </div>
         </div>
 
@@ -6624,6 +6554,18 @@ function PortalProfileEditor({ member, onUpdate }: any) {
                 readOnly
                 className="w-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5 rounded-2xl px-5 py-4 text-sm outline-none cursor-not-allowed opacity-60"
               />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Avatar URL</label>
+              <div className="relative">
+                <LinkIcon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={form.photo_url || ''}
+                  onChange={e => setForm({ ...form, photo_url: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-11 pr-5 py-4 text-sm focus:border-indigo-600 outline-none transition-all"
+                  placeholder="https://example.com/photo.jpg"
+                />
+              </div>
             </div>
             <div className="md:col-span-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Biography</label>

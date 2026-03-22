@@ -656,72 +656,15 @@ export const autoExpireEvents = async () => {
 };
 
 export const validateAndCheckIn = async (memberId: string, code: string, memberLat?: number, memberLng?: number) => {
-    // 1. Find ALL events (active and recently expired) to match by code
-    const { data: allEvents, error: eventErr } = await supabase
-        .from('attendance_events')
-        .select('*');
+    const { data, error } = await supabase.rpc('secure_check_in', {
+        p_member_id: memberId,
+        p_code: code,
+        p_lat: memberLat,
+        p_lng: memberLng
+    });
 
-    if (eventErr) throw eventErr;
-
-    // 2. Find matching event by code
-    const matchingEvent = (allEvents || []).find(
-        (e: any) => e.check_in_code.toUpperCase() === code.toUpperCase()
-    );
-
-    if (!matchingEvent) {
-        throw new Error('Invalid check-in code.');
-    }
-
-    // 3. Check if the event's code is still valid for today
-    const now = new Date();
-    
-    // Convert both to local date strings to compare roughly
-    const eventDateObj = new Date(`${matchingEvent.date}T00:00:00`);
-    const hoursDiff = Math.abs(now.getTime() - eventDateObj.getTime()) / 36e5;
-    
-    // Valid if it's within roughly 24 hours of the event date (handles timezone offsets up to a point)
-    if (hoursDiff > 30) {
-        throw new Error('This event check-in code is no longer valid for today.');
-    }
-
-    // Determine if late (checking in after start time)
-    const start = new Date(`${matchingEvent.date}T${matchingEvent.start_time}`);
-    const isLate = now > start;
-
-    // 4. Validate Location if Event requires it
-    if (matchingEvent.lat != null && matchingEvent.lng != null) {
-        if (memberLat == null || memberLng == null) {
-            throw new Error('This event requires location access. Please allow location access to check in.');
-        }
-
-        const distanceMeters = calculateDistanceMeters(
-            memberLat, memberLng,
-            matchingEvent.lat, matchingEvent.lng
-        );
-        const maxRadius = matchingEvent.radius_meters || 150; // Default 150 meters
-
-        if (distanceMeters > maxRadius) {
-            throw new Error(`You must be within ${maxRadius}m of the venue to check in. You are ${Math.round(distanceMeters)}m away.`);
-        }
-    }
-
-    // 5. Check if already checked in
-    const { data: existing, error: _checkErr } = await supabase
-        .from('attendance_records')
-        .select('id')
-        .eq('event_id', matchingEvent.id)
-        .eq('member_id', memberId)
-        .single();
-
-    if (existing) {
-        throw new Error('You have already checked in for this event.');
-    }
-
-    // 6. Mark attendance
-    return markAttendance(matchingEvent.id, memberId, {
-        source: 'member_portal',
-        timestamp: new Date().toISOString()
-    }, isLate);
+    if (error) throw error;
+    return data;
 };
 
 export const getCurrentActiveSession = async (memberId: string) => {
@@ -806,19 +749,4 @@ export const getMemberPortalAttendance = async (memberId: string) => {
     return data || [];
 };
 
-// Haversine formula to find distance between two lat/lng coordinates in meters
-function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371e3; // Earth radius in meters
-    const rad = Math.PI / 180;
-    const phi1 = lat1 * rad;
-    const phi2 = lat2 * rad;
-    const deltaPhi = (lat2 - lat1) * rad;
-    const deltaLambda = (lon2 - lon1) * rad;
 
-    const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-        Math.cos(phi1) * Math.cos(phi2) *
-        Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
-
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-}

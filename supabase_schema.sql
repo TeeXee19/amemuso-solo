@@ -329,3 +329,83 @@ BEGIN
   RETURN v_updated;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ==========================================================
+-- SECURE ATTENDANCE CHECK-IN (Phase 2 RPC)
+-- ==========================================================
+
+CREATE OR REPLACE FUNCTION calculate_distance(lat1 float, lon1 float, lat2 float, lon2 float)
+RETURNS float AS $$
+DECLARE
+    radius float = 6371000; -- Earth's radius in meters
+    dlat float;
+    dlon float;
+    a float;
+    c float;
+BEGIN
+    lat1 = lat1 * pi() / 180;
+    lon1 = lon1 * pi() / 180;
+    lat2 = lat2 * pi() / 180;
+    lon2 = lon2 * pi() / 180;
+
+    dlat = lat2 - lat1;
+    dlon = lon2 - lon1;
+
+    a = sin(dlat/2) * sin(dlat/2) + cos(lat1) * cos(lat2) * sin(dlon/2) * sin(dlon/2);
+    c = 2 * atan2(sqrt(a), sqrt(1-a));
+
+    RETURN radius * c;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION secure_check_in(p_member_id UUID, p_code TEXT, p_lat FLOAT DEFAULT NULL, p_lng FLOAT DEFAULT NULL)
+RETURNS json
+AS $$
+DECLARE
+  v_event record;
+  v_distance float;
+  v_is_late boolean;
+  v_record record;
+BEGIN
+  -- 1. Find Event by code
+  SELECT * INTO v_event FROM attendance_events WHERE UPPER(check_in_code) = UPPER(p_code) AND is_active = true ORDER BY created_at DESC LIMIT 1;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invalid check-in code.';
+  END IF;
+
+  -- 2. Time validation (Approx 30 hours)
+  IF EXTRACT(EPOCH FROM (NOW() - (v_event.date + v_event.start_time))) / 3600 > 30 THEN
+    RAISE EXCEPTION 'This event check-in code is no longer valid for today.';
+  END IF;
+
+  -- 3. Location validation
+  IF v_event.lat IS NOT NULL AND v_event.lng IS NOT NULL THEN
+    IF p_lat IS NULL OR p_lng IS NULL THEN
+      RAISE EXCEPTION 'This event requires location access. Please allow location access to check in.';
+    END IF;
+    
+    v_distance = calculate_distance(p_lat, p_lng, v_event.lat, v_event.lng);
+    IF v_distance > COALESCE(v_event.radius_meters, 150) THEN
+      RAISE EXCEPTION 'You must be within %m of the venue to check in. You are %m away.', COALESCE(v_event.radius_meters, 150), ROUND(v_distance::numeric);
+    END IF;
+  END IF;
+
+  -- 4. Check if already checked in
+  PERFORM 1 FROM attendance_records WHERE event_id = v_event.id AND member_id = p_member_id;
+  IF FOUND THEN
+    RAISE EXCEPTION 'You have already checked in for this event.';
+  END IF;
+
+  -- 5. Calculate late status
+  v_is_late = NOW() > (v_event.date + v_event.start_time);
+
+  -- 6. Insert record
+  INSERT INTO attendance_records (event_id, member_id, is_late, metadata)
+  VALUES (v_event.id, p_member_id, v_is_late, '{"source": "member_portal", "secure_rpc": true}'::jsonb)
+  RETURNING * INTO v_record;
+
+  RETURN row_to_json(v_record);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP POLICY IF EXISTS "Public insert attendance_records" ON attendance_records;
