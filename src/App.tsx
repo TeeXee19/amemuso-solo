@@ -10,7 +10,7 @@ import {
   getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers, uploadMemberPhoto, getMemberByPortalId,
   getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory,
   getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, getMemberAttendanceStats, validateAndCheckIn, autoExpireEvents, calculateHonorarium,
-  validateAndCheckOut, adminCheckOutMember, getMemberPortalAttendance, getCurrentActiveSession
+  validateAndCheckOut, adminCheckOutMember, getMemberPortalAttendance, getCurrentActiveSession, verifyMemberLogin, secureUpdateMemberProfile
 } from './lib/db';
 import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
@@ -1649,16 +1649,16 @@ function LoginView({ onLogin }: { onLogin: () => void }) {
     setLoading(true);
 
     try {
-      const admin = await getAdminUser(email);
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
 
-      // Fallback for initial setup if the table is empty - strictly for migration
-      const isInitialSetup = !admin && email === 'admin@amemusochoir.org' && password === 'Password@1';
-
-      if (isInitialSetup || (admin && admin.password_hash === password)) {
+      if (authError || !data.session) {
+        setError('Invalid email or password');
+      } else {
         onLogin();
         navigate('/admin');
-      } else {
-        setError('Invalid email or password');
       }
     } catch (err) {
       console.error(err);
@@ -5774,10 +5774,7 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
     setLoading(true);
     setError('');
     try {
-      const data = await getMemberByPortalId(portalId);
-      if (!data || data.portal_pin !== pin) {
-        throw new Error('Invalid Member Code or PIN');
-      }
+      const data = await verifyMemberLogin(portalId, pin);
       onLogin(data);
     } catch (err: any) {
       setError(err.message || 'Login failed');
@@ -6531,8 +6528,8 @@ function PortalProfileEditor({ member, onUpdate }: any) {
       const publicUrl = await uploadMemberPhoto(file);
       setForm((prev: any) => ({ ...prev, photo_url: publicUrl }));
       // Automatically save the photo update
-      const data = await updateMember(member.id, { photo_url: publicUrl });
-      onUpdate(data[0]);
+      const data = await secureUpdateMemberProfile(member.portal_id, member.portal_pin, { photo_url: publicUrl });
+      onUpdate(data);
     } catch (err) {
       console.error("Photo upload failed:", err);
     } finally {
@@ -6543,9 +6540,9 @@ function PortalProfileEditor({ member, onUpdate }: any) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const { member_positions, ...sanitizedForm } = form;
-      const data = await updateMember(member.id, sanitizedForm);
-      onUpdate(data[0]);
+      const { member_positions, registrations, ...sanitizedForm } = form;
+      const data = await secureUpdateMemberProfile(member.portal_id, member.portal_pin, sanitizedForm);
+      onUpdate(data);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {

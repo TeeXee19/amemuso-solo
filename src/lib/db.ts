@@ -385,6 +385,20 @@ export const updateMemberPin = async (id: string, pin: string) => {
     return updateMember(id, { portal_pin: pin });
 };
 
+export const verifyMemberLogin = async (portalId: string, pin: string) => {
+    const { data, error } = await supabase
+        .rpc('verify_member_login', { p_portal_id: portalId, p_pin: pin });
+    if (error) throw error;
+    return data;
+};
+
+export const secureUpdateMemberProfile = async (portalId: string, pin: string, updates: any) => {
+    const { data, error } = await supabase
+        .rpc('secure_update_member_profile', { p_portal_id: portalId, p_pin: pin, p_updates: updates });
+    if (error) throw error;
+    return data;
+};
+
 export const bulkInsertMembers = async (membersToInsert: any[]) => {
     const { data, error } = await supabase
         .from('members')

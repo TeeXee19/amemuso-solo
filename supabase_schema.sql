@@ -44,24 +44,24 @@ DROP POLICY IF EXISTS "Public insert registrations" ON registrations;
 CREATE POLICY "Public insert registrations" ON registrations FOR INSERT WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Public update registrations" ON registrations;
-CREATE POLICY "Public update registrations" ON registrations FOR UPDATE USING (true);
+CREATE POLICY "Public update registrations" ON registrations FOR UPDATE USING (auth.role() = 'authenticated');
 
 DROP POLICY IF EXISTS "Public delete registrations" ON registrations;
-CREATE POLICY "Public delete registrations" ON registrations FOR DELETE USING (true);
+CREATE POLICY "Public delete registrations" ON registrations FOR DELETE USING (auth.role() = 'authenticated');
 
 -- 6. Policies for config
 DROP POLICY IF EXISTS "Public read config" ON config;
 CREATE POLICY "Public read config" ON config FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Admin update config" ON config;
-CREATE POLICY "Admin update config" ON config FOR ALL USING (true);
+CREATE POLICY "Admin update config" ON config FOR ALL USING (auth.role() = 'authenticated');
 
 -- 7. Policies for performance_weeks (New Table)
 DROP POLICY IF EXISTS "Public read weeks" ON performance_weeks;
 CREATE POLICY "Public read weeks" ON performance_weeks FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Admin all weeks" ON performance_weeks;
-CREATE POLICY "Admin all weeks" ON performance_weeks FOR ALL USING (true);
+CREATE POLICY "Admin all weeks" ON performance_weeks FOR ALL USING (auth.role() = 'authenticated');
 
 -- 8. Policies for repertoire_submissions
 DROP POLICY IF EXISTS "Public read submissions" ON repertoire_submissions;
@@ -71,7 +71,7 @@ DROP POLICY IF EXISTS "Public insert submissions" ON repertoire_submissions;
 CREATE POLICY "Public insert submissions" ON repertoire_submissions FOR INSERT WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Admin all submissions" ON repertoire_submissions;
-CREATE POLICY "Admin all submissions" ON repertoire_submissions FOR ALL USING (true);
+CREATE POLICY "Admin all submissions" ON repertoire_submissions FOR ALL USING (auth.role() = 'authenticated');
 -- 9. Waitlist System
 CREATE TABLE IF NOT EXISTS waitlist (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS waitlist (
 ALTER TABLE waitlist ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public join waitlist" ON waitlist FOR INSERT WITH CHECK (true);
 CREATE POLICY "Public read waitlist" ON waitlist FOR SELECT USING (true);
-CREATE POLICY "Admin manage waitlist" ON waitlist FOR ALL USING (true);
+CREATE POLICY "Admin manage waitlist" ON waitlist FOR ALL USING (auth.role() = 'authenticated');
 
 -- 10. Admin Accounts (RBAC)
 CREATE TABLE IF NOT EXISTS users_admin (
@@ -133,7 +133,7 @@ DROP POLICY IF EXISTS "Public read positions" ON member_positions;
 CREATE POLICY "Public read positions" ON member_positions FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Admin all positions" ON member_positions;
-CREATE POLICY "Admin all positions" ON member_positions FOR ALL USING (true);
+CREATE POLICY "Admin all positions" ON member_positions FOR ALL USING (auth.role() = 'authenticated');
 
 -- 12. Members (Added join date and dynamic positions)
 CREATE TABLE IF NOT EXISTS members (
@@ -177,7 +177,7 @@ DROP POLICY IF EXISTS "Public read members" ON members;
 CREATE POLICY "Public read members" ON members FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Admin all members" ON members;
-CREATE POLICY "Admin all members" ON members FOR ALL USING (true);
+CREATE POLICY "Admin all members" ON members FOR ALL USING (auth.role() = 'authenticated');
 
 -- 12. Storage Buckets & Policies
 -- Run this in SQL Editor:
@@ -228,7 +228,7 @@ DROP POLICY IF EXISTS "Public read attendance_events" ON attendance_events;
 CREATE POLICY "Public read attendance_events" ON attendance_events FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Admin manage attendance_events" ON attendance_events;
-CREATE POLICY "Admin manage attendance_events" ON attendance_events FOR ALL USING (true);
+CREATE POLICY "Admin manage attendance_events" ON attendance_events FOR ALL USING (auth.role() = 'authenticated');
 
 DROP POLICY IF EXISTS "Public read attendance_records" ON attendance_records;
 CREATE POLICY "Public read attendance_records" ON attendance_records FOR SELECT USING (true);
@@ -237,9 +237,95 @@ DROP POLICY IF EXISTS "Public insert attendance_records" ON attendance_records;
 CREATE POLICY "Public insert attendance_records" ON attendance_records FOR INSERT WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Admin manage attendance_records" ON attendance_records;
-CREATE POLICY "Admin manage attendance_records" ON attendance_records FOR ALL USING (true);
+CREATE POLICY "Admin manage attendance_records" ON attendance_records FOR ALL USING (auth.role() = 'authenticated');
 
 -- 15. Check-Out and Lateness (Phase 11)
 ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS check_out_time TIMESTAMP WITH TIME ZONE;
 ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS is_late BOOLEAN DEFAULT false;
 
+
+
+-- ==========================================================
+-- SECURE PORTAL API (RPC)
+-- ==========================================================
+
+CREATE TABLE IF NOT EXISTS portal_login_attempts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  portal_id TEXT NOT NULL,
+  attempt_time TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Delete old attempts
+CREATE OR REPLACE FUNCTION clean_old_login_attempts() RETURNS void AS $$
+BEGIN
+  DELETE FROM portal_login_attempts WHERE attempt_time < NOW() - INTERVAL '15 minutes';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION verify_member_login(p_portal_id TEXT, p_pin TEXT)
+RETURNS json
+AS $$
+DECLARE
+  v_member json;
+  v_attempts INT;
+BEGIN
+  PERFORM clean_old_login_attempts();
+  
+  SELECT COUNT(*) INTO v_attempts FROM portal_login_attempts WHERE portal_id = p_portal_id;
+  IF v_attempts >= 5 THEN
+    RAISE EXCEPTION 'Too many login attempts. Please wait 15 minutes.';
+  END IF;
+
+  SELECT row_to_json(m) INTO v_member FROM members m WHERE portal_id = p_portal_id AND portal_pin = p_pin;
+  
+  IF v_member IS NULL THEN
+    INSERT INTO portal_login_attempts (portal_id) VALUES (p_portal_id);
+    RAISE EXCEPTION 'Invalid Portal ID or PIN';
+  ELSE
+    DELETE FROM portal_login_attempts WHERE portal_id = p_portal_id;
+    RETURN v_member;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION secure_update_member_profile(p_portal_id TEXT, p_pin TEXT, p_updates jsonb)
+RETURNS json
+AS $$
+DECLARE
+  v_member record;
+  v_updated json;
+BEGIN
+  -- Verify credentials
+  SELECT * INTO v_member FROM members WHERE portal_id = p_portal_id AND portal_pin = p_pin;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  UPDATE members 
+  SET 
+    full_name = COALESCE(p_updates->>'full_name', full_name),
+    voice_part = COALESCE(p_updates->>'voice_part', voice_part),
+    bio = COALESCE(p_updates->>'bio', bio),
+    phone = COALESCE(p_updates->>'phone', phone),
+    email = COALESCE(p_updates->>'email', email),
+    youtube = COALESCE(p_updates->>'youtube', youtube),
+    instagram = COALESCE(p_updates->>'instagram', instagram),
+    facebook = COALESCE(p_updates->>'facebook', facebook),
+    twitter = COALESCE(p_updates->>'twitter', twitter),
+    tiktok = COALESCE(p_updates->>'tiktok', tiktok),
+    photo_url = COALESCE(p_updates->>'photo_url', photo_url)
+  WHERE portal_id = p_portal_id 
+  RETURNING row_to_json(members.*) INTO v_updated;
+
+  -- Also update linked registration if needed
+  IF (p_updates ? 'full_name' OR p_updates ? 'voice_part') THEN
+    UPDATE registrations 
+    SET 
+      full_name = COALESCE(p_updates->>'full_name', full_name),
+      voice_part = COALESCE(p_updates->>'voice_part', voice_part)
+    WHERE id = v_member.registration_id;
+  END IF;
+
+  RETURN v_updated;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
