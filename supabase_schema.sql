@@ -158,6 +158,7 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS position_id UUID REFERENCES member_
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_on_probation BOOLEAN DEFAULT false;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS probation_until DATE;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT false;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS has_seen_walkthrough BOOLEAN DEFAULT false;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS youtube TEXT;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS instagram TEXT;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS facebook TEXT;
@@ -313,7 +314,8 @@ BEGIN
     facebook = COALESCE(p_updates->>'facebook', facebook),
     twitter = COALESCE(p_updates->>'twitter', twitter),
     tiktok = COALESCE(p_updates->>'tiktok', tiktok),
-    photo_url = COALESCE(p_updates->>'photo_url', photo_url)
+    photo_url = COALESCE(p_updates->>'photo_url', photo_url),
+    has_seen_walkthrough = COALESCE((p_updates->>'has_seen_walkthrough')::boolean, has_seen_walkthrough)
   WHERE portal_id = p_portal_id 
   RETURNING row_to_json(members.*) INTO v_updated;
 

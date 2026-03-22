@@ -10,7 +10,7 @@ import {
   getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers,
   getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory,
   getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, getMemberAttendanceStats, validateAndCheckIn, autoExpireEvents, calculateHonorarium,
-  validateAndCheckOut, adminCheckOutMember, getMemberPortalAttendance, getCurrentActiveSession, verifyMemberLogin, secureUpdateMemberProfile
+  validateAndCheckOut, adminCheckOutMember, getMemberPortalAttendance, getCurrentActiveSession, verifyMemberLogin, secureUpdateMemberProfile, markWalkthroughAsSeen
 } from './lib/db';
 import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
@@ -5708,15 +5708,111 @@ function SongEntryView({ setConfirmModal }: { setConfirmModal: any }) {
 
 // --- Main App Entry ---
 
+// --- Member Portal Walkthrough (Phase 13) ---
+
+function MemberWalkthrough({ isOpen, onComplete, onSkip }: any) {
+  const [step, setStep] = useState(0);
+
+  const steps = [
+    {
+      title: "Welcome to SOLO",
+      description: "Welcome to your personal Choir Portal. This is your central hub for all things Amemuso.",
+      icon: Users,
+      color: "bg-indigo-600"
+    },
+    {
+      title: "Secure Check-in",
+      description: "Mark your attendance effortlessly. Enter the event code and ensure your GPS is active to verify your presence at the venue.",
+      icon: CalendarCheck,
+      color: "bg-emerald-600"
+    },
+    {
+      title: "Your Identity",
+      description: "Manage your professional bio and profile picture. Use an external Photo URL to keep your profile looking sharp!",
+      icon: User,
+      color: "bg-fuchsia-600"
+    },
+    {
+      title: "Social & Stats",
+      description: "Connect your social handles and track your attendance honors. Competitive leaderboards keep the energy high!",
+      icon: Trophy,
+      color: "bg-amber-600"
+    }
+  ];
+
+  if (!isOpen) return null;
+
+  const current = steps[step];
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-xl">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="w-full max-w-lg bg-white dark:bg-[#131521] rounded-[3rem] shadow-2xl border border-white/10 overflow-hidden"
+      >
+        <div className="p-10 text-center space-y-8">
+          <div className={cn("w-20 h-20 rounded-3xl flex items-center justify-center mx-auto text-white shadow-2xl transition-all duration-500", current.color)}>
+            <current.icon size={40} />
+          </div>
+          
+          <div className="space-y-3 min-h-[100px]">
+            <h3 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">{current.title}</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed max-w-xs mx-auto font-medium">
+              {current.description}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-center gap-2">
+            {steps.map((_, i) => (
+              <div key={i} className={cn("h-1.5 rounded-full transition-all duration-300", i === step ? "w-8 bg-indigo-600" : "w-1.5 bg-slate-200 dark:bg-white/10")} />
+            ))}
+          </div>
+
+          <div className="flex items-center gap-4 pt-4">
+            <button 
+              onClick={onSkip}
+              className="flex-1 py-4 px-6 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+            >
+              Skip Tour
+            </button>
+            <button 
+              onClick={() => {
+                if (step < steps.length - 1) setStep(s => s + 1);
+                else onComplete();
+              }}
+              className="flex-[2] py-5 px-6 rounded-2xl bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all"
+            >
+              {step < steps.length - 1 ? "Next Step" : "Get Started"}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // --- Member Portal View (Phase 6) ---
 
-function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
+function MemberPortalView({ member, onLogin, onLogout, onUpdate, setConfirmModal }: any) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [memberStats, setMemberStats] = useState<any>(null);
   const [attendanceEvents, setAttendanceEvents] = useState<any[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showWalkthrough, setShowWalkthrough] = useState(!member.has_seen_walkthrough);
+
+  const handleWalkthroughComplete = async () => {
+    try {
+      await markWalkthroughAsSeen(member.portal_id, member.portal_pin);
+      onUpdate({ ...member, has_seen_walkthrough: true });
+      setShowWalkthrough(false);
+    } catch (e) {
+      console.error(e);
+      setShowWalkthrough(false);
+    }
+  };
 
   const isProvost = member?.member_positions?.title?.toLowerCase() === 'provost';
 
@@ -5752,6 +5848,15 @@ function MemberPortalView({ member, onLogin, onLogout, setConfirmModal }: any) {
 
   return (
     <div className="font-portal min-h-screen bg-[#F8FAFC] dark:bg-[#0b0d17] text-slate-900 dark:text-white">
+      <AnimatePresence>
+        {showWalkthrough && (
+          <MemberWalkthrough 
+            isOpen={showWalkthrough} 
+            onComplete={handleWalkthroughComplete}
+            onSkip={handleWalkthroughComplete}
+          />
+        )}
+      </AnimatePresence>
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div
@@ -6723,6 +6828,11 @@ export default function App() {
     localStorage.removeItem('portal-member');
   };
 
+  const handlePortalUpdate = (updatedMember: any) => {
+    setPortalMember(updatedMember);
+    localStorage.setItem('portal-member', JSON.stringify(updatedMember));
+  };
+
   if (!isSupabaseConfigured) {
     return <PublicView setConfirmModal={() => { }} />;
   }
@@ -6750,7 +6860,7 @@ export default function App() {
           element={isAuthenticated ? <AdminView onLogout={handleLogout} setConfirmModal={setConfirmModal} /> : <Navigate to="/login" replace />}
         />
         <Route path="/login" element={<LoginView onLogin={handleLogin} />} />
-        <Route path="/portal" element={<MemberPortalView member={portalMember} onLogin={handlePortalLogin} onLogout={handlePortalLogout} setConfirmModal={setConfirmModal} />} />
+        <Route path="/portal" element={<MemberPortalView member={portalMember} onLogin={handlePortalLogin} onLogout={handlePortalLogout} onUpdate={handlePortalUpdate} setConfirmModal={setConfirmModal} />} />
         <Route path="/" element={<RosterView />} />
         <Route path="/repertoire" element={<SongEntryView setConfirmModal={setConfirmModal} />} />
       </Routes>

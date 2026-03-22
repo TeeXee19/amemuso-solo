@@ -749,4 +749,9 @@ export const getMemberPortalAttendance = async (memberId: string) => {
     return data || [];
 };
 
+export const markWalkthroughAsSeen = async (portalId: string, pin: string) => {
+    return secureUpdateMemberProfile(portalId, pin, { has_seen_walkthrough: true });
+};
+
+
 
