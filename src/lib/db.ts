@@ -631,7 +631,6 @@ export const calculateHonorarium = (attendancePercentage: number): number => {
 };
 
 export const autoExpireEvents = async () => {
-    const now = new Date();
     const { data: activeEvents, error } = await supabase
         .from('attendance_events')
         .select('id, date, start_time, duration_minutes')
@@ -641,9 +640,11 @@ export const autoExpireEvents = async () => {
 
     const expiredIds = activeEvents
         .filter((e: any) => {
-            const start = new Date(`${e.date}T${e.start_time}`);
-            const end = new Date(start.getTime() + (e.duration_minutes || 60) * 60 * 1000);
-            return now > end;
+            const eventDate = new Date(e.date);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            eventDate.setHours(0, 0, 0, 0);
+            return today > eventDate;
         })
         .map((e: any) => e.id);
 
@@ -668,8 +669,10 @@ export const validateAndCheckIn = async (memberId: string, code: string, memberL
 };
 
 export const getCurrentActiveSession = async (memberId: string) => {
-    // Look for records where check_out_time is null for today's active events
-    const { data: activeEvents } = await supabase.from('attendance_events').select('*').eq('is_active', true);
+    // Look for records where check_out_time is null for today's events (active or recently inactive)
+    const { data: activeEvents } = await supabase.from('attendance_events')
+        .select('*')
+        .or('is_active.eq.true,date.eq.' + new Date().toISOString().split('T')[0]);
     if (!activeEvents || activeEvents.length === 0) return null;
 
     const eventIds = activeEvents.map((e: any) => e.id);
@@ -691,7 +694,6 @@ export const validateAndCheckOut = async (recordId: string, eventStartTimeStr: s
     if (now < minimumCheckoutTime) {
         throw new Error('Check-out is only available 1 hour and 45 minutes after the rehearsal start time.');
     }
-
     const { data, error } = await supabase
         .from('attendance_records')
         .update({ check_out_time: now.toISOString() })

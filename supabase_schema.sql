@@ -277,7 +277,14 @@ BEGIN
     RAISE EXCEPTION 'Too many login attempts. Please wait 15 minutes.';
   END IF;
 
-  SELECT row_to_json(m) INTO v_member FROM members m WHERE portal_id = p_portal_id AND portal_pin = p_pin;
+  SELECT row_to_json(joined_member) INTO v_member 
+  FROM (
+    SELECT m.*, 
+      (SELECT row_to_json(pos) FROM member_positions pos WHERE pos.id = m.position_id) as member_positions,
+      (SELECT row_to_json(reg) FROM registrations reg WHERE reg.id = m.registration_id) as registrations
+    FROM members m 
+    WHERE UPPER(m.portal_id) = UPPER(p_portal_id) AND m.portal_pin = p_pin
+  ) joined_member;
   
   IF v_member IS NULL THEN
     INSERT INTO portal_login_attempts (portal_id) VALUES (p_portal_id);
@@ -297,7 +304,7 @@ DECLARE
   v_updated json;
 BEGIN
   -- Verify credentials
-  SELECT * INTO v_member FROM members WHERE portal_id = p_portal_id AND portal_pin = p_pin;
+  SELECT * INTO v_member FROM members WHERE UPPER(portal_id) = UPPER(p_portal_id) AND portal_pin = p_pin;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Unauthorized';
   END IF;
@@ -316,8 +323,7 @@ BEGIN
     tiktok = COALESCE(p_updates->>'tiktok', tiktok),
     photo_url = COALESCE(p_updates->>'photo_url', photo_url),
     has_seen_walkthrough = COALESCE((p_updates->>'has_seen_walkthrough')::boolean, has_seen_walkthrough)
-  WHERE portal_id = p_portal_id 
-  RETURNING row_to_json(members.*) INTO v_updated;
+  WHERE portal_id = p_portal_id;
 
   -- Also update linked registration if needed
   IF (p_updates ? 'full_name' OR p_updates ? 'voice_part') THEN
@@ -327,6 +333,16 @@ BEGIN
       voice_part = COALESCE(p_updates->>'voice_part', voice_part)
     WHERE id = v_member.registration_id;
   END IF;
+
+  -- 8. Return updated member with full joins
+  SELECT row_to_json(joined_member) INTO v_updated 
+  FROM (
+    SELECT m.*, 
+      (SELECT row_to_json(pos) FROM member_positions pos WHERE pos.id = m.position_id) as member_positions,
+      (SELECT row_to_json(reg) FROM registrations reg WHERE reg.id = m.registration_id) as registrations
+    FROM members m 
+    WHERE m.portal_id = p_portal_id
+  ) joined_member;
 
   RETURN v_updated;
 END;
@@ -398,8 +414,9 @@ BEGIN
     RAISE EXCEPTION 'You have already checked in for this event.';
   END IF;
 
-  -- 5. Calculate late status
-  v_is_late = NOW() > (v_event.date + v_event.start_time);
+  -- 5. Calculate late status: Only late if AFTER the duration has elapsed
+  -- Using WAT (Africa/Lagos) timezone for comparison to matches local event times
+  v_is_late = (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'Africa/Lagos') > (v_event.date + v_event.start_time + (COALESCE(v_event.duration_minutes, 60) * interval '1 minute'));
 
   -- 6. Insert record
   INSERT INTO attendance_records (event_id, member_id, is_late, metadata)

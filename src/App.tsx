@@ -2964,7 +2964,7 @@ function AttendanceManagement({ events, fetchData, setConfirmModal, showDelete =
                           "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full",
                           selectedEvent?.id === event.id ? "bg-white/20 text-white" : "bg-slate-100 dark:bg-white/10 text-slate-500"
                         )}>
-                          {new Date(event.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • {event.start_time.slice(0, 5)}
+                          {event.date ? new Date(event.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'No Date'} • {event.start_time ? event.start_time.slice(0, 5) : '--:--'}
                         </span>
                         <span className={cn(
                           "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full",
@@ -3574,7 +3574,7 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
         getWaitlist(),
         getMembers(),
         getMemberPositions(),
-        autoExpireEvents().then(() => getAttendanceEvents())
+        autoExpireEvents().catch(e => console.warn("Auto-expire failed:", e)).then(() => getAttendanceEvents())
       ]);
 
       const [configsRes, regsRes, repsRes, weeksRes, waitRes, memsRes, posRes, attendanceRes] = results;
@@ -3590,7 +3590,8 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
       if (memsRes.status === 'fulfilled') setMembers(memsRes.value as any);
       if (posRes.status === 'fulfilled') setPositions(posRes.value as any);
       if (attendanceRes.status === 'fulfilled') setAttendanceEvents(attendanceRes.value as any);
-      else console.error("Members/Attendance fetch failed:", (memsRes as any).reason);
+      else console.error("Attendance fetch failed:", (attendanceRes as any).reason);
+      if (memsRes.status !== 'fulfilled') console.error("Members fetch failed:", (memsRes as any).reason);
 
     } catch (err) {
       console.error("Critical fetch error:", err);
@@ -5796,6 +5797,7 @@ function MemberWalkthrough({ isOpen, onComplete, onSkip }: any) {
 
 function MemberPortalView({ member, onLogin, onLogout, onUpdate, setConfirmModal }: any) {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [historyInitialTab, setHistoryInitialTab] = useState<'performance' | 'attendance'>('performance');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [memberStats, setMemberStats] = useState<any>(null);
@@ -5947,9 +5949,18 @@ function MemberPortalView({ member, onLogin, onLogout, onUpdate, setConfirmModal
         </header>
 
         <main className="p-4 lg:p-12">
-          {activeTab === 'dashboard' && <PortalDashboard member={member} stats={memberStats} />}
+          {activeTab === 'dashboard' && (
+            <PortalDashboard 
+              member={member} 
+              stats={memberStats} 
+              onViewAttendance={() => {
+                setHistoryInitialTab('attendance');
+                setActiveTab('history');
+              }}
+            />
+          )}
           {activeTab === 'leaderboard' && <VoicePartLeaderboard />}
-          {activeTab === 'history' && <PortalHistory memberId={member.id} />}
+          {activeTab === 'history' && <PortalHistory memberId={member.id} initialTab={historyInitialTab} />}
           {isProvost && activeTab === 'attendance' && (
             <AttendanceManagement
               events={attendanceEvents}
@@ -5993,7 +6004,7 @@ function PortalLogin({ onLogin, loading, error }: any) {
                   <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input
                     value={portalId}
-                    onChange={e => setPortalId(e.target.value)}
+                    onChange={e => setPortalId(e.target.value.toUpperCase().trim())}
                     className="w-full text-black dark:text-white bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-4 text-sm focus:border-indigo-500 outline-none uppercase font-bold tracking-widest"
                     placeholder="Your Username"
                   />
@@ -6111,7 +6122,7 @@ function VoicePartLeaderboard() {
   );
 }
 
-function PortalDashboard({ member, stats }: any) {
+function PortalDashboard({ member, stats, onViewAttendance }: any) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
@@ -6216,7 +6227,10 @@ function PortalDashboard({ member, stats }: any) {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full lg:w-auto">
             {/* Stats Card 1 */}
-            <div className="bg-white/5 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/10 hover:border-white/20 transition-colors group min-w-full lg:min-w-[140px] shadow-xl overflow-hidden relative">
+            <div 
+              onClick={onViewAttendance}
+              className="bg-white/5 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/10 hover:border-white/20 transition-colors group min-w-full lg:min-w-[140px] shadow-xl overflow-hidden relative cursor-pointer"
+            >
               <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <div className="relative z-10">
                 <p className="text-indigo-200/80 text-[10px] font-black uppercase tracking-widest mb-1 flex items-center gap-2"><CalendarCheck size={12} /> Attendance</p>
@@ -6239,7 +6253,10 @@ function PortalDashboard({ member, stats }: any) {
             </div>
 
             {/* Stats Card 3 */}
-            <div className="bg-white/5 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/10 hover:border-white/20 transition-colors group min-w-full lg:min-w-[140px] shadow-xl relative overflow-hidden">
+            <div 
+              onClick={onViewAttendance}
+              className="bg-white/5 backdrop-blur-2xl p-6 rounded-[2rem] border border-white/10 hover:border-white/20 transition-colors group min-w-full lg:min-w-[140px] shadow-xl relative overflow-hidden cursor-pointer"
+            >
               <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <div className="relative z-10">
                 <p className="text-indigo-200/80 text-[10px] font-black uppercase tracking-widest mb-1 flex items-center gap-2"><Music size={12} /> Solo Credits</p>
@@ -6424,11 +6441,11 @@ function PortalDashboard({ member, stats }: any) {
   );
 }
 
-function PortalHistory({ memberId }: { memberId: string }) {
+function PortalHistory({ memberId, initialTab = 'performance' }: { memberId: string, initialTab?: 'performance' | 'attendance' }) {
   const [history, setHistory] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'performance' | 'attendance'>('performance');
+  const [activeTab, setActiveTab] = useState<'performance' | 'attendance'>(initialTab);
 
   useEffect(() => {
     Promise.all([
