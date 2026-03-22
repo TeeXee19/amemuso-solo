@@ -3064,7 +3064,19 @@ function AttendanceManagement({ events, fetchData, setConfirmModal, showDelete =
                 <div className="flex items-center justify-between pt-4 border-t border-white/10">
                   <div>
                     <p className={cn("text-[9px] font-black uppercase tracking-widest", selectedEvent?.id === event.id ? "text-indigo-200" : "text-slate-400")}>Check-in Code</p>
-                    <p className="text-xl font-black tracking-[0.3em] font-mono">{event.check_in_code}</p>
+                    <div className="flex items-center gap-3">
+                      <p className="text-xl font-black tracking-[0.3em] font-mono">{event.check_in_code}</p>
+                      <a 
+                        href={`https://wa.me/?text=Attendance%20Code%20for%20${encodeURIComponent(event.title)}%20is%3A%20*${event.check_in_code}*`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-emerald-500 hover:text-emerald-400 hover:scale-110 transition-transform"
+                        title="Share to WhatsApp"
+                      >
+                         <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
+                      </a>
+                    </div>
                   </div>
                   <div className="text-right">
                     <p className={cn("text-[9px] font-black uppercase tracking-widest", selectedEvent?.id === event.id ? "text-indigo-200" : "text-slate-400")}>Duration</p>
@@ -3903,6 +3915,30 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
     setEditVoicePart(r.voice_part);
   };
 
+  const handleExportDirectoryCSV = () => {
+    if (!statsSource || statsSource.length === 0) return;
+    const headers = ['Full Name', 'Portal ID', 'Voice Part', 'Phone', 'Email', 'Attendance %', 'Lateness Count', 'Probation Status'];
+    const rows = statsSource.map((m: any) => [
+      `"${m.full_name || ''}"`,
+      `"${m.portal_id || ''}"`,
+      `"${m.voice_part || ''}"`,
+      `"${m.phone || ''}"`,
+      `"${m.email || ''}"`,
+      `${Math.round(m.attendance_percentage || 0)}%`,
+      `${m.lateness_count || 0}`,
+      m.is_on_probation ? 'Probation' : 'Good'
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'members_directory_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleSaveEdit = async () => {
     if (!editingId) return;
     setSavingId(editingId);
@@ -4248,6 +4284,12 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                         <Download size={16} /> Template
                       </a>
                       <button
+                        onClick={handleExportDirectoryCSV}
+                        className="w-full sm:w-auto flex justify-center items-center gap-2 px-6 py-3 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 rounded-2xl text-sm font-bold transition-all whitespace-nowrap"
+                      >
+                        <Download size={16} /> Export CSV
+                      </button>
+                      <button
                         onClick={() => setIsImportModalOpen(true)}
                         className="w-full sm:w-auto flex justify-center items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl text-sm font-bold transition-all whitespace-nowrap hover:scale-105 active:scale-95 shadow-xl shadow-slate-900/10 dark:shadow-white/10"
                       >
@@ -4265,6 +4307,13 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Gamification Leaderboard */}
+            {(activeTab === 'list' || activeTab === 'members') && (
+              <div className="mb-6">
+                <VoicePartLeaderboard />
               </div>
             )}
 
@@ -5916,6 +5965,76 @@ function PortalLogin({ onLogin, loading, error }: any) {
   );
 }
 
+function VoicePartLeaderboard() {
+  const [members, setMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getMembers().then(setMembers).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-indigo-500" /></div>;
+
+  const parts = ['Soprano', 'Alto', 'Tenor', 'Bass', 'Instrumentalist'];
+  
+  const leaderboard = parts.map(part => {
+    const partMembers = members.filter(m => m.voice_part === part && !m.is_archived);
+    const avg = partMembers.length > 0 
+      ? partMembers.reduce((sum, m) => sum + (m.attendance_percentage || 0), 0) / partMembers.length 
+      : 0;
+    return { part, avg: avg || 0, count: partMembers.length };
+  }).filter(l => l.count > 0).sort((a, b) => b.avg - a.avg);
+
+  return (
+    <div className="bg-white/80 dark:bg-[#131521]/80 backdrop-blur-2xl rounded-[2.5rem] p-8 border border-slate-200/50 dark:border-white/5 space-y-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-indigo-500/5 relative overflow-hidden group">
+      <div className="absolute inset-0 bg-gradient-to-t from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div className="relative z-10">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-12 h-12 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center shadow-lg">
+            <Trophy size={24} />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Section Leaderboard</h3>
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Attendance Race</p>
+          </div>
+        </div>
+        <div className="space-y-4">
+          {leaderboard.map((l, index) => (
+            <div key={l.part} className="flex items-center gap-4 p-4 bg-white dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md transition-shadow">
+              <div className={cn(
+                "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm",
+                index === 0 ? "bg-amber-500 text-white shadow-lg shadow-amber-500/20" : 
+                index === 1 ? "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300" :
+                index === 2 ? "bg-amber-700/50 text-amber-700 dark:text-amber-500" :
+                "bg-slate-100 dark:bg-white/5 text-slate-500"
+              )}>
+                #{index + 1}
+              </div>
+              <div className="flex-1">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest">{l.part}</span>
+                  <span className={cn("text-sm font-black", index === 0 ? "text-amber-500" : "text-indigo-500")}>
+                    {Math.round(l.avg)}%
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 dark:bg-white/5 rounded-full h-2 overflow-hidden shadow-inner">
+                  <div 
+                    className={cn("h-full rounded-full transition-all duration-1000", index === 0 ? "bg-amber-500" : "bg-indigo-500")} 
+                    style={{ width: `${Math.round(l.avg)}%` }} 
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+          {leaderboard.length === 0 && (
+            <p className="text-xs text-slate-500 italic text-center py-4">No data available yet</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PortalDashboard({ member, stats }: any) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -6222,6 +6341,11 @@ function PortalDashboard({ member, stats }: any) {
               </Link>
             </div>
           </div>
+        </div>
+
+        {/* Gamification Leaderboard */}
+        <div className="lg:col-span-2">
+          <VoicePartLeaderboard />
         </div>
       </div>
     </div>
