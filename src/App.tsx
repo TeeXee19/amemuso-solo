@@ -6,8 +6,8 @@ import { supabase, isSupabaseConfigured } from './lib/supabase';
 import {
   getConfigs, getRegistrations, registerSoloist, updateMaxSlots, updateConfig, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires, updatePerformanceStatus, resetPerformanceStatus,
   getPerformanceWeeks,
-  getWaitlist, joinWaitlist, deleteWaitlistEntry, getAdminUser,
-  getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers, uploadMemberPhoto, getMemberByPortalId,
+  getWaitlist, joinWaitlist, deleteWaitlistEntry,
+  getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers, uploadMemberPhoto,
   getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory,
   getAttendanceEvents, createAttendanceEvent, updateAttendanceEvent, deleteAttendanceEvent, getAttendanceRecords, getMemberAttendanceStats, validateAndCheckIn, autoExpireEvents, calculateHonorarium,
   validateAndCheckOut, adminCheckOutMember, getMemberPortalAttendance, getCurrentActiveSession, verifyMemberLogin, secureUpdateMemberProfile
