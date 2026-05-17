@@ -25,12 +25,12 @@ const ROSTER_SCHEDULE = [
     { date: '3rd May', slots: [26, 28, 30, 32] },
     { date: '10th May', slots: [33, 35, 37, 39] },
     { date: '17th May', slots: [57, 59, 61, 63] },
-    { date: '24th May', slots: [2, 4, 6, 8] },
-    { date: '31st May', slots: [18, 20, 22, 24] },
-    { date: '7th June', slots: [49, 51, 53, 55] },
-    { date: '14th June', slots: [50, 52, 54, 56] },
-    { date: '21st June', slots: [9, 11, 13, 15] },
-    { date: '28th June', slots: [17, 19, 21, 23] }
+    { date: '24th May', slots: [2, 4, 6, 8, 71] },
+    { date: '31st May', slots: [18, 20, 22, 24, 72] },
+    { date: '7th June', slots: [49, 51, 53, 55, 73] },
+    { date: '14th June', slots: [50, 52, 54, 56, 74] },
+    { date: '21st June', slots: [9, 11, 13, 15, 75] },
+    { date: '28th June', slots: [17, 19, 21, 23, 76] }
 ];
 
 async function seedWeeks() {

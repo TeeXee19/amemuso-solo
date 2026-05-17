@@ -233,6 +233,17 @@ export const deletePerformanceWeek = async (id: string) => {
     if (error) throw error;
 };
 
+export const updatePerformanceWeekSlots = async (id: string, slotIds: number[]) => {
+    const { data, error } = await supabase
+        .from('performance_weeks')
+        .update({ slot_ids: slotIds })
+        .eq('id', id)
+        .select();
+
+    if (error) throw error;
+    return data;
+};
+
 // --- Waitlist System ---
 
 export const getWaitlist = async () => {

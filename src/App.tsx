@@ -5,7 +5,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import {
   getConfigs, getRegistrations, registerSoloist, updateMaxSlots, updateConfig, editRegistration, deleteRegistration, getRepertoires, addRepertoire, approveRepertoire, rejectRepertoire, deleteRepertoire, deleteAllRepertoires, updatePerformanceStatus, resetPerformanceStatus,
-  getPerformanceWeeks,
+  getPerformanceWeeks, updatePerformanceWeekSlots,
   getWaitlist, joinWaitlist, deleteWaitlistEntry,
   getMembers, addMember, updateMember, deleteMember, promoteMemberToFull, importRegistrationsToMembers,
   getMemberPositions, addMemberPosition, deleteMemberPosition, getMemberHistory,
@@ -16,7 +16,7 @@ import {
   ChevronRight, ChevronLeft, Search, Download, Settings, Grid, BookOpen, Link as LinkIcon, ExternalLink, Menu, Activity,
   Users, Trash2, Loader2, X, Check, Music, Sun, Monitor, Moon, Edit2, Plus,
   Calendar, Briefcase, History, Archive, Youtube, Instagram, Facebook, Twitter, Video, CalendarCheck,
-  LogOut, CheckSquare, Lock, Trophy, User, ShieldCheck, ShieldAlert, Share2, Mail, Phone as PhoneIcon, Save, MapPin, Upload, AlertCircle, MessageSquareHeart, Edit3, Filter
+  LogOut, CheckSquare, Lock, Trophy, User, Shield, ShieldCheck, ShieldAlert, Share2, Mail, Phone, Save, MapPin, Upload, AlertCircle, MessageSquareHeart, Edit3, Filter
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -85,6 +85,93 @@ function ConfirmModal({ isOpen, onClose, onConfirm, title, message, loading, ico
               className={cn("flex-1 py-3 px-4 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2", color, color === 'bg-rose-500' ? 'hover:bg-rose-400' : 'hover:opacity-90')}
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : confirmText}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function AssignSlotModal({ isOpen, onClose, onAssign, entry, registrations, maxSlots, loading }: any) {
+  const [selectedSlot, setSelectedSlot] = useState<number | ''>('');
+
+  const availableSlots = useMemo(() => {
+    if (!registrations) return [];
+    const takenSlots = registrations.map((r: any) => r.slot_id);
+    const av: number[] = [];
+    for (let i = 1; i <= maxSlots; i++) {
+      if (!takenSlots.includes(i)) {
+        av.push(i);
+      }
+    }
+    return av;
+  }, [registrations, maxSlots]);
+
+  useEffect(() => {
+    if (isOpen && availableSlots.length > 0) {
+      setSelectedSlot(availableSlots[0]);
+    } else {
+      setSelectedSlot('');
+    }
+  }, [isOpen, availableSlots]);
+
+  if (!isOpen || !entry) return null;
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="w-full max-w-md overflow-hidden bg-white dark:bg-[#131521] rounded-3xl shadow-2xl border border-slate-200 dark:border-white/10"
+      >
+        <div className="p-6">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-indigo-500/10 text-indigo-500">
+            <Music size={24} />
+          </div>
+          <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Assign Slot Manually</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+            Choose a performance slot for <span className="font-bold text-slate-700 dark:text-slate-200">{entry.full_name}</span> ({entry.voice_part}).
+          </p>
+
+          {availableSlots.length === 0 ? (
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-500 text-xs font-bold mb-6">
+              No available slots. Please increase the maximum slot limit or delete an existing registration first.
+            </div>
+          ) : (
+            <div className="space-y-4 mb-8">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 block">Select Slot</label>
+              <select
+                value={selectedSlot}
+                onChange={e => setSelectedSlot(Number(e.target.value))}
+                className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-5 py-3 text-sm focus:border-indigo-500 outline-none transition-all font-medium text-slate-900 dark:text-white"
+              >
+                {availableSlots.map(s => (
+                  <option key={s} value={s}>Slot S-{s}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="flex-1 py-3 px-4 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (selectedSlot !== '') {
+                  onAssign(entry, selectedSlot);
+                }
+              }}
+              disabled={loading || selectedSlot === ''}
+              className="flex-1 py-3 px-4 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500"
+            >
+              {loading ? <Loader2 size={16} className="animate-spin" /> : 'Assign'}
             </button>
           </div>
         </div>
@@ -307,7 +394,7 @@ function MemberEntryModal({ isOpen, onClose, onSave, member, registrations, load
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Phone Number</label>
                       <div className="relative">
-                        <PhoneIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
                           value={form.phone}
                           onChange={e => setForm({ ...form, phone: e.target.value })}
@@ -1195,6 +1282,7 @@ function PublicView({ setConfirmModal }: { setConfirmModal: any }) {
   const [phone, setPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [performanceWeeks, setPerformanceWeeks] = useState<any[]>([]);
 
   const fetchData = async () => {
     try {
@@ -1207,6 +1295,7 @@ function PublicView({ setConfirmModal }: { setConfirmModal: any }) {
       // Filter out test registrations for the public view
       setRegistrations(regs.filter((r: any) => !r.is_test));
       const publicWeeks = weeks.filter((w: any) => !w.is_test);
+      setPerformanceWeeks(publicWeeks);
 
       // Auto-select the first week if none selected
       if (!selectedWeekId && publicWeeks.length > 0) {
@@ -1368,6 +1457,9 @@ function PublicView({ setConfirmModal }: { setConfirmModal: any }) {
                 const isTaken = !!reg;
                 const isSelected = selectedSlot === slotId;
 
+                const slotWeek = (performanceWeeks || []).find(w => (w.slot_ids || []).includes(slotId));
+                const weekDate = slotWeek ? slotWeek.date : null;
+
                 // Filter by voice part if tab selected
                 if (activeVoiceTab !== 'All' && isTaken && reg.voice_part !== activeVoiceTab) return null;
 
@@ -1387,6 +1479,11 @@ function PublicView({ setConfirmModal }: { setConfirmModal: any }) {
                   >
                     <div className="mt-1 mb-2 flex-1">
                       <span className="text-[17px] font-black tracking-tight text-slate-900 dark:text-white group-disabled:text-slate-500 leading-none">S-{slotId}</span>
+                      {weekDate && (
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold tracking-tight leading-none mt-0.5">
+                          {weekDate}
+                        </div>
+                      )}
                       {isTaken && reg && (
                         <div className="mt-1.5">
                           <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block truncate w-full" title={reg.full_name}>
@@ -1475,24 +1572,31 @@ function PublicView({ setConfirmModal }: { setConfirmModal: any }) {
                         exit={{ opacity: 0, x: -20 }}
                         className="flex flex-col flex-1"
                       >
-                        {stats.available > 0 ? (
-                          <div className="p-6 bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[1.5rem] relative overflow-hidden group shadow-[0_8px_30px_rgba(0,0,0,0.5)] mb-8">
-                            <div className="flex items-center gap-5 relative z-10">
-                              <div className="w-14 h-14 bg-indigo-600/20 rounded-[1.1rem] flex items-center justify-center text-indigo-400 border border-indigo-500/30">
-                                <Grid size={24} />
+                        {stats.available > 0 ? (() => {
+                          const selectedSlotWeek = (performanceWeeks || []).find(w => (w.slot_ids || []).includes(selectedSlot!));
+                          const selectedWeekDate = selectedSlotWeek ? selectedSlotWeek.date : null;
+                          return (
+                            <div className="p-6 bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-[1.5rem] relative overflow-hidden group shadow-[0_8px_30px_rgba(0,0,0,0.5)] mb-8">
+                              <div className="flex items-center gap-5 relative z-10">
+                                <div className="w-14 h-14 bg-indigo-600/20 rounded-[1.1rem] flex items-center justify-center text-indigo-400 border border-indigo-500/30">
+                                  <Grid size={24} />
+                                </div>
+                                <div className="flex flex-col">
+                                  <h4 className="text-[28px] font-black text-slate-900 dark:text-white leading-none tracking-tight">S-{selectedSlot}</h4>
+                                  {selectedWeekDate && (
+                                    <span className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1">Performance Date: {selectedWeekDate}</span>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex flex-col">
-                                <h4 className="text-[28px] font-black text-slate-900 dark:text-white leading-none tracking-tight">S-{selectedSlot}</h4>
+                              <div className="mt-4 flex items-center gap-1.5 ml-1 relative z-10">
+                                <div className="w-[18px] h-[18px] rounded-full flex items-center justify-center bg-emerald-500 shadow-lg shadow-emerald-500/30">
+                                  <Check size={12} className="text-black" strokeWidth={3} />
+                                </div>
+                                <span className="text-[15px] font-medium text-slate-500 dark:text-slate-400 tracking-wide ml-1">Available</span>
                               </div>
                             </div>
-                            <div className="mt-4 flex items-center gap-1.5 ml-1 relative z-10">
-                              <div className="w-[18px] h-[18px] rounded-full flex items-center justify-center bg-emerald-500 shadow-lg shadow-emerald-500/30">
-                                <Check size={12} className="text-black" strokeWidth={3} />
-                              </div>
-                              <span className="text-[15px] font-medium text-slate-500 dark:text-slate-400 tracking-wide ml-1">Available</span>
-                            </div>
-                          </div>
-                        ) : (
+                          );
+                        })() : (
                           <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-[1.5rem] relative overflow-hidden mb-8">
                             <div className="flex items-center gap-4 relative z-10">
                               <div className="w-12 h-12 bg-rose-500/20 rounded-[1.1rem] flex items-center justify-center text-rose-500 border border-rose-500/30 font-black">
@@ -2225,7 +2329,7 @@ function MembersView() {
   const fetchMembers = async () => {
     try {
       const data = await getMembers();
-      setMembers(data);
+      setMembers(data.filter((m: any) => !m.is_archived));
     } catch (err) {
       console.error(err);
     } finally {
@@ -2239,6 +2343,28 @@ function MembersView() {
     return matchesSearch && matchesFilter;
   });
 
+  // Sorting: Music Director first, then Excos, then Part Leaders, then Alphabetical
+  const sortedMembers = [...filteredMembers].sort((a, b) => {
+    const aTitle = a.member_positions?.title || '';
+    const bTitle = b.member_positions?.title || '';
+    const aCat = a.member_positions?.category || 'General';
+    const bCat = b.member_positions?.category || 'General';
+    
+    // 1. Music Director always first
+    if (aTitle === 'Music Director' && bTitle !== 'Music Director') return -1;
+    if (aTitle !== 'Music Director' && bTitle === 'Music Director') return 1;
+
+    // 2. Excos next
+    if (aCat === 'Exco' && bCat !== 'Exco') return -1;
+    if (aCat !== 'Exco' && bCat === 'Exco') return 1;
+    
+    // 3. Part Leaders next
+    if (aCat === 'Part Leader' && bCat === 'General') return -1;
+    if (aCat === 'General' && bCat === 'Part Leader') return 1;
+    
+    return (a.full_name || '').localeCompare(b.full_name || '');
+  });
+
   if (loading) return (
     <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0b0d17]">
       <Loader2 className="animate-spin text-indigo-500" size={40} />
@@ -2246,33 +2372,35 @@ function MembersView() {
   );
 
   return (
-    <Layout subtitle="Member Management" isAuthenticated={false}>
-      <div className="space-y-8 max-w-6xl mx-auto">
+    <Layout subtitle="Choir Directory" isAuthenticated={false}>
+      <div className="space-y-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 border-b border-slate-200 dark:border-white/5 pb-12">
           <div>
-            <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-2 tracking-tight uppercase italic">Choir Directory</h2>
-            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Meet the talented members of our choir community.</p>
+            <h2 className="text-5xl font-black text-slate-900 dark:text-white mb-4 tracking-tighter uppercase italic leading-none">
+              Our <span className="text-indigo-600">Choir</span>
+            </h2>
+            <p className="text-slate-500 dark:text-slate-400 text-lg font-medium max-w-xl">Meet the talented voices that bring our music to life. Grouped by section and leadership.</p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            <div className="relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-500 transition-colors" size={18} />
+          <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto items-center">
+            <div className="relative group w-full sm:w-72">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search members..."
-                className="w-full sm:w-64 bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/5 rounded-2xl pl-12 pr-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all placeholder:text-slate-500"
+                placeholder="Find a member..."
+                className="w-full bg-white dark:bg-[#131521] border border-slate-200 dark:border-white/10 rounded-[2rem] pl-12 pr-6 py-4 text-sm font-bold focus:border-indigo-500 outline-none transition-all shadow-xl shadow-black/5"
               />
             </div>
-            <div className="flex bg-white dark:bg-[#131521] p-1 rounded-2xl border border-slate-200 dark:border-white/5">
-              {['All', ...VOICE_PARTS].map(p => (
+            <div className="flex bg-slate-100 dark:bg-white/5 p-1 rounded-[2rem] border border-slate-200 dark:border-white/5 overflow-x-auto scrollbar-hide">
+              {['All', 'Soprano', 'Alto', 'Tenor', 'Bass'].map(p => (
                 <button
                   key={p}
                   onClick={() => setFilter(p)}
                   className={cn(
-                    "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                    filter === p ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                    "px-6 py-3 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                    filter === p ? "bg-white dark:bg-[#131521] text-indigo-600 shadow-md" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
                   )}
                 >
                   {p}
@@ -2282,61 +2410,81 @@ function MembersView() {
           </div>
         </div>
 
-        {/* Members Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          <AnimatePresence>
-            {filteredMembers.map(member => (
-              <motion.div
-                key={member.id}
-                layout
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                onClick={() => setSelectedMember(member)}
-                className="group glass p-6 rounded-[2.5rem] border border-slate-200 dark:border-white/5 hover:border-indigo-500/30 transition-all cursor-pointer relative overflow-hidden flex flex-col items-center text-center space-y-4"
-              >
-                <div className="absolute top-4 right-4 text-indigo-500 opacity-20 group-hover:opacity-100 transition-opacity">
-                  <ExternalLink size={16} />
-                </div>
+        {/* Categories Grouping if showing All */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          <AnimatePresence mode="popLayout">
+            {sortedMembers.map((m: any) => {
+              const isExco = m.member_positions?.category === 'Exco';
+              const isPartLeader = m.member_positions?.category === 'Part Leader';
 
-                <div className="relative">
-                  <div className="w-24 h-24 rounded-3xl bg-slate-100 dark:bg-slate-800 overflow-hidden border-4 border-white dark:border-[#131521] shadow-xl group-hover:scale-105 transition-transform duration-500">
-                    <img
-                      src={member.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(member.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`}
-                      alt={member.full_name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  {member.is_soloist && (
-                    <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-slate-900 border-4 border-white dark:border-[#131521] shadow-lg">
-                      <Music size={12} strokeWidth={3} />
-                    </div>
+              return (
+                <motion.div
+                  key={m.id}
+                  layout
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  onClick={() => setSelectedMember(m)}
+                  className={cn(
+                    "group relative bg-white dark:bg-[#131521] rounded-[3rem] border overflow-hidden transition-all hover:shadow-2xl hover:-translate-y-2 cursor-pointer",
+                    isExco 
+                      ? "border-indigo-500/30 shadow-indigo-500/5 ring-1 ring-indigo-500/10" 
+                      : "border-slate-200 dark:border-white/5 shadow-xl shadow-black/5"
                   )}
-                </div>
+                >
+                  <div className="h-64 relative overflow-hidden">
+                    <img 
+                      src={m.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(m.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`} 
+                      alt={m.full_name} 
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                    
+                    <div className="absolute bottom-6 left-8 right-8 flex justify-between items-end">
+                      <div>
+                        <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-[0.3em]">{m.voice_part}</p>
+                        <h4 className="text-2xl font-black text-white leading-tight mt-1">{m.full_name}</h4>
+                      </div>
+                    </div>
+                    
+                    {(isExco || isPartLeader) && (
+                      <div className="absolute top-6 right-6 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[9px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full flex items-center gap-2">
+                        <Shield size={12} className={cn(isExco ? "text-amber-400" : "text-indigo-400")} />
+                        {m.member_positions?.title}
+                      </div>
+                    )}
+                  </div>
 
-                <div>
-                  <h3 className="text-xl font-black text-slate-900 dark:text-white leading-none tracking-tight">{member.full_name}</h3>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500 mt-2">{member.voice_part}</p>
-                </div>
-
-                {member.bio && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 italic leading-relaxed">
-                    "{member.bio}"
-                  </p>
-                )}
-              </motion.div>
-            ))}
+                  <div className="p-8 space-y-4">
+                    {m.bio && (
+                      <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-3 italic leading-relaxed">
+                        "{m.bio}"
+                      </p>
+                    )}
+                    
+                    <div className="flex items-center gap-2 pt-2">
+                      <div className="flex -space-x-2">
+                        {[1,2,3].map(i => (
+                          <div key={i} className="w-6 h-6 rounded-full border-2 border-white dark:border-[#131521] bg-slate-100 dark:bg-slate-800" />
+                        ))}
+                      </div>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Connect Profile</span>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         </div>
 
-        {filteredMembers.length === 0 && (
-          <div className="py-20 text-center space-y-4">
-            <div className="w-20 h-20 bg-slate-200 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto text-slate-400">
-              <Users size={32} />
+        {sortedMembers.length === 0 && (
+          <div className="py-32 flex flex-col items-center justify-center text-center space-y-6">
+            <div className="w-24 h-24 bg-slate-100 dark:bg-white/5 rounded-full flex items-center justify-center text-slate-300">
+              <Search size={48} />
             </div>
             <div>
-              <p className="text-xl font-black text-slate-900 dark:text-white uppercase italic">No members found</p>
-              <p className="text-slate-500 dark:text-slate-400 text-sm">Try adjusting your search or filter.</p>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">No members match your search</h3>
+              <p className="text-slate-500 dark:text-slate-400 mt-2">Try clearing your filters or searching for someone else.</p>
             </div>
           </div>
         )}
@@ -2354,7 +2502,7 @@ function MembersView() {
 
 // --- Analytics & Stage Views ---
 
-function AnalyticsView({ registrations, repertoires }: { registrations: any[], repertoires: any[] }) {
+function AnalyticsView({ registrations, repertoires, maxSlots = 90 }: { registrations: any[], repertoires: any[], maxSlots?: number }) {
   const stats = {
     total: (registrations || []).length,
     soprano: (registrations || []).filter(r => r.voice_part === 'Soprano').length,
@@ -2364,7 +2512,7 @@ function AnalyticsView({ registrations, repertoires }: { registrations: any[], r
     instrumentalist: (registrations || []).filter(r => r.voice_part === 'Instrumentalist').length,
   };
 
-  const totalPossible = 70;
+  const totalPossible = maxSlots;
   const fillRate = totalPossible > 0 ? Math.round((stats.total / totalPossible) * 100) : 0;
 
   const submissionStats = {
@@ -3194,57 +3342,120 @@ function AttendanceManagement({ events, fetchData, setConfirmModal, showDelete =
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5">
-                  <div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-white">Require Location Verification</p>
-                    <p className="text-[10px] text-slate-500 font-medium mt-0.5">
-                      {form.lat && form.lng ? `Restricted to current location (${form.radius_meters}m radius)` : 'Optional: Prevent remote check-ins'}
-                    </p>
+                <div className="flex flex-col gap-3 p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">Require Location Verification</p>
+                      <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                        {form.lat !== null && form.lng !== null ? `Restricted to location (${form.radius_meters}m radius)` : 'Optional: Prevent remote check-ins'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {form.lat === null && form.lng === null ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLocating(true);
+                            navigator.geolocation.getCurrentPosition(
+                              (pos) => {
+                                setForm({ ...form, lat: pos.coords.latitude, lng: pos.coords.longitude });
+                                setLocating(false);
+                              },
+                              (err) => {
+                                console.warn("Location error:", err);
+                                setLocating(false);
+                                alert("Location access denied or unavailable.");
+                              },
+                              { enableHighAccuracy: true, timeout: 10000 }
+                            );
+                          }}
+                          className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20"
+                        >
+                          {locating ? <Loader2 size={14} className="animate-spin" /> : <MapPin size={14} />}
+                          Fetch My Base
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, lat: null, lng: null })}
+                          className="px-3 py-2 rounded-xl text-xs font-bold transition-all bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
+                        >
+                          Clear Location
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (form.lat && form.lng) {
-                        setForm({ ...form, lat: null, lng: null });
-                      } else {
-                        setLocating(true);
-                        navigator.geolocation.getCurrentPosition(
-                          (pos) => {
-                            setForm({ ...form, lat: pos.coords.latitude, lng: pos.coords.longitude });
-                            setLocating(false);
-                          },
-                          (err) => {
-                            console.warn("Location error:", err);
-                            setLocating(false);
-                            alert("Location access denied or unavailable.");
-                          },
-                          { enableHighAccuracy: true, timeout: 10000 }
-                        );
-                      }
-                    }}
-                    className={cn(
-                      "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
-                      form.lat && form.lng
-                        ? "bg-emerald-500/10 text-emerald-500"
-                        : "bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20"
-                    )}
-                  >
-                    {locating ? <Loader2 size={14} className="animate-spin" /> : <MapPin size={14} />}
-                    {form.lat && form.lng ? 'Location Set' : 'Set Location'}
-                  </button>
-                </div>
 
-                {form.lat && form.lng && (
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Allowed Distance (Meters)</label>
-                    <input
-                      type="number"
-                      value={form.radius_meters}
-                      onChange={e => setForm({ ...form, radius_meters: parseInt(e.target.value) })}
-                      className="w-full bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-5 py-4 text-xs font-bold outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                )}
+                  {form.lat === null && form.lng === null && (
+                    <div className="pt-3 border-t border-slate-200 dark:border-white/5 mt-1">
+                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Or Enter Custom Coordinates manually</p>
+                       <div className="grid grid-cols-2 gap-4">
+                         <input
+                           type="number"
+                           step="any"
+                           value={form.lat === null ? '' : form.lat}
+                           onChange={e => {
+                             const val = e.target.value;
+                             setForm({ ...form, lat: val === '' ? null : parseFloat(val) });
+                           }}
+                           className="w-full bg-white dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-indigo-500"
+                           placeholder="Latitude (e.g. 9.076)"
+                         />
+                         <input
+                           type="number"
+                           step="any"
+                           value={form.lng === null ? '' : form.lng}
+                           onChange={e => {
+                             const val = e.target.value;
+                             setForm({ ...form, lng: val === '' ? null : parseFloat(val) });
+                           }}
+                           className="w-full bg-white dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-indigo-500"
+                           placeholder="Longitude (e.g. 7.398)"
+                         />
+                       </div>
+                    </div>
+                  )}
+
+                  {form.lat !== null && form.lng !== null && (
+                    <div className="grid grid-cols-3 gap-4 pt-3 border-t border-slate-200 dark:border-white/5 mt-1">
+                       <div className="space-y-1">
+                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Lat</label>
+                         <input
+                           type="number"
+                           step="any"
+                           value={form.lat}
+                           onChange={e => {
+                             const val = e.target.value;
+                             setForm({ ...form, lat: val === '' ? null : parseFloat(val) });
+                           }}
+                           className="w-full bg-white dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-indigo-500"
+                         />
+                       </div>
+                       <div className="space-y-1">
+                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Lng</label>
+                         <input
+                           type="number"
+                           step="any"
+                           value={form.lng}
+                           onChange={e => {
+                             const val = e.target.value;
+                             setForm({ ...form, lng: val === '' ? null : parseFloat(val) });
+                           }}
+                           className="w-full bg-white dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-indigo-500"
+                         />
+                       </div>
+                       <div className="space-y-1">
+                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Radius (m)</label>
+                         <input
+                           type="number"
+                           value={form.radius_meters}
+                           onChange={e => setForm({ ...form, radius_meters: parseInt(e.target.value) || 0 })}
+                           className="w-full bg-white dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-indigo-500"
+                         />
+                       </div>
+                    </div>
+                  )}
+                </div>
                 
                 <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5">
                   <div>
@@ -3563,6 +3774,14 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
 
   const [selectedRepertoires, setSelectedRepertoires] = useState<string[]>([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
+
+  // Waitlist Manual Assignment State
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [assigningWaitlistEntry, setAssigningWaitlistEntry] = useState<any>(null);
+
+  // Weekly Slots Allocation Manager State
+  const [addingSlotWeekId, setAddingSlotWeekId] = useState<string | null>(null);
+  const [newSlotNumber, setNewSlotNumber] = useState<string>('');
 
   const fetchData = async () => {
     try {
@@ -4014,6 +4233,31 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
         }
       }
     });
+  };
+
+  const handleAssignWaitlistSlot = async (entry: any, slotId: number) => {
+    try {
+      setBulkActionLoading(true);
+      await registerSoloist(entry.full_name, entry.voice_part, slotId, entry.phone);
+      await deleteWaitlistEntry(entry.id);
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      setConfirmModal({
+        isOpen: true,
+        title: "Assignment Failed",
+        message: "Failed to assign slot: " + (err.message || "Unknown error"),
+        icon: ShieldAlert,
+        confirmText: "Close",
+        color: "bg-slate-600",
+        hideCancel: true,
+        onConfirm: () => { }
+      });
+    } finally {
+      setBulkActionLoading(false);
+      setIsAssignModalOpen(false);
+      setAssigningWaitlistEntry(null);
+    }
   };
 
   const handleSaveMember = async (form: any) => {
@@ -4866,10 +5110,20 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                                 <div className="flex justify-end gap-2">
                                   <button
                                     onClick={() => handlePromoteWaitlist(w)}
-                                    disabled={bulkActionLoading || stats.total >= maxSlots}
+                                    disabled={bulkActionLoading || registrations.length >= maxSlots}
                                     className="px-4 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-30"
                                   >
-                                    {bulkActionLoading ? '...' : 'Promote'}
+                                    {bulkActionLoading ? '...' : 'Auto-Promote'}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setAssigningWaitlistEntry(w);
+                                      setIsAssignModalOpen(true);
+                                    }}
+                                    disabled={bulkActionLoading || registrations.length >= maxSlots}
+                                    className="px-4 py-2 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-500 border border-indigo-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-30"
+                                  >
+                                    Assign Slot
                                   </button>
                                   <button
                                     onClick={() => handleRemoveWaitlist(w.id, w.full_name)}
@@ -4889,7 +5143,7 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                 </div>
               </div>
             ) : activeTab === 'analytics' ? (
-              <AnalyticsView registrations={registrations} repertoires={repertoires} />
+              <AnalyticsView registrations={registrations} repertoires={repertoires} maxSlots={maxSlots} />
             ) : activeTab === 'history' ? (
               <CompletedSolosView registrations={registrations} performanceWeeks={performanceWeeks} fetchData={fetchData} setConfirmModal={setConfirmModal} />
             ) : activeTab === 'live' ? (
@@ -5131,38 +5385,229 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
                 )}
               </div>
             ) : activeTab === 'settings' ? (
-              <div className="max-w-md space-y-10 py-10">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Settings size={18} className="text-indigo-400" />
-                    <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">Capacity Management</h4>
+              <div className="max-w-4xl space-y-10 py-10">
+                <div className="max-w-md space-y-10">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Settings size={18} className="text-indigo-400" />
+                      <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">Capacity Management</h4>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed px-1">Adjust the total number of registration slots available for this event.</p>
+                    <div className="flex gap-4">
+                      <input
+                        type="number"
+                        value={maxSlots}
+                        onChange={e => setMaxSlots(parseInt(e.target.value))}
+                        className="flex-1 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all font-bold"
+                      />
+                      <button onClick={() => updateMaxSlots(maxSlots)} className="px-8 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-500 transition-all uppercase tracking-tighter italic">Update</button>
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed px-1">Adjust the total number of registration slots available for this event.</p>
-                  <div className="flex gap-4">
-                    <input
-                      type="number"
-                      value={maxSlots}
-                      onChange={e => setMaxSlots(parseInt(e.target.value))}
-                      className="flex-1 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all font-bold"
-                    />
-                    <button onClick={() => updateMaxSlots(maxSlots)} className="px-8 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-500 transition-all uppercase tracking-tighter italic">Update</button>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 mb-2">
+                      <History size={18} className="text-amber-400" />
+                      <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">Probation Period</h4>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed px-1">Set the default number of months for new member probation.</p>
+                    <div className="flex gap-4">
+                      <input
+                        type="number"
+                        value={defaultProbationMonths}
+                        onChange={e => setDefaultProbationMonths(parseInt(e.target.value))}
+                        className="flex-1 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all font-bold"
+                      />
+                      <button onClick={() => updateConfig('default_probation_months', defaultProbationMonths.toString())} className="px-8 bg-amber-500 text-slate-900 font-black rounded-2xl hover:bg-amber-400 transition-all uppercase tracking-tighter italic">Update</button>
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    <History size={18} className="text-amber-400" />
-                    <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">Probation Period</h4>
+                {/* Weekly Slots Allocation Manager */}
+                <div className="p-8 bg-slate-50 dark:bg-[#131521]/40 rounded-[2.5rem] border border-slate-200 dark:border-white/5 space-y-6">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-3">
+                      <Grid size={20} className="text-indigo-400" />
+                      <div>
+                        <h4 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-sm">Weekly Slots Allocation</h4>
+                        <p className="text-xs text-slate-500 leading-relaxed mt-1">Manage performance slots assigned to specific dates. Slot IDs cannot exceed overall slots ({maxSlots}).</p>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed px-1">Set the default number of months for new member probation.</p>
-                  <div className="flex gap-4">
-                    <input
-                      type="number"
-                      value={defaultProbationMonths}
-                      onChange={e => setDefaultProbationMonths(parseInt(e.target.value))}
-                      className="flex-1 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 transition-all font-bold"
-                    />
-                    <button onClick={() => updateConfig('default_probation_months', defaultProbationMonths.toString())} className="px-8 bg-amber-500 text-slate-900 font-black rounded-2xl hover:bg-amber-400 transition-all uppercase tracking-tighter italic">Update</button>
+
+                  <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0b0d17]">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-white/5 text-[10px] font-black uppercase tracking-wider text-slate-500 bg-slate-50/50 dark:bg-[#131521]/30">
+                          <th className="px-6 py-4">Performance Date</th>
+                          <th className="px-6 py-4">Allocated Slots</th>
+                          <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-white/5">
+                        {(performanceWeeks || []).map(week => {
+                          const isAdding = addingSlotWeekId === week.id;
+                          return (
+                            <tr key={week.id} className="hover:bg-slate-50/30 dark:hover:bg-[#131521]/10 transition-colors">
+                              <td className="px-6 py-4">
+                                <div className="font-bold text-slate-900 dark:text-white text-sm">{week.date}</div>
+                                {week.is_test && <span className="text-[9px] bg-amber-500/10 text-amber-500 font-bold px-1.5 py-0.5 rounded uppercase mt-1 inline-block">Test</span>}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex flex-wrap gap-2 items-center">
+                                  {(week.slot_ids || []).map((slotId: number) => {
+                                    // Check if this slot is registered
+                                    const reg = (registrations || []).find(r => r.slot_id === slotId);
+                                    const isRegistered = !!reg;
+                                    return (
+                                      <span
+                                        key={slotId}
+                                        className={cn(
+                                          "inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black transition-all border",
+                                          isRegistered
+                                            ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                                            : "bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 border-transparent hover:border-rose-500/30"
+                                        )}
+                                        title={isRegistered ? `Booked by ${reg.full_name}` : undefined}
+                                      >
+                                        <span>S-{slotId}</span>
+                                        {isRegistered ? (
+                                          <Lock size={10} className="opacity-60 text-indigo-400" />
+                                        ) : (
+                                          <button
+                                            onClick={async () => {
+                                              const newSlots = (week.slot_ids || []).filter((s: number) => s !== slotId);
+                                              setConfirmModal({
+                                                isOpen: true,
+                                                title: "Deallocate Slot",
+                                                message: `Are you sure you want to remove slot S-${slotId} from ${week.date}?`,
+                                                icon: Trash2,
+                                                confirmText: "Remove",
+                                                color: "bg-rose-500",
+                                                onConfirm: async () => {
+                                                  try {
+                                                    await updatePerformanceWeekSlots(week.id, newSlots);
+                                                    await fetchData();
+                                                  } catch (err: any) {
+                                                    console.error(err);
+                                                  }
+                                                }
+                                              });
+                                            }}
+                                            className="text-slate-400 hover:text-rose-500 transition-colors"
+                                            title="Deallocate Slot"
+                                          >
+                                            <X size={10} strokeWidth={3} />
+                                          </button>
+                                        )}
+                                      </span>
+                                    );
+                                  })}
+                                  {(week.slot_ids || []).length === 0 && (
+                                    <span className="text-xs text-slate-500 italic">No slots allocated</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                {isAdding ? (
+                                  <div className="flex items-center justify-end gap-2">
+                                    <input
+                                      type="number"
+                                      placeholder="Slot ID"
+                                      value={newSlotNumber}
+                                      onChange={e => setNewSlotNumber(e.target.value)}
+                                      className="w-20 bg-slate-50 dark:bg-[#0b0d17] border border-slate-200 dark:border-white/5 rounded-xl px-2 py-1.5 text-xs outline-none focus:border-indigo-500 font-bold text-center text-slate-900 dark:text-white"
+                                      autoFocus
+                                    />
+                                    <button
+                                      onClick={async () => {
+                                        const slotNum = parseInt(newSlotNumber);
+                                        if (isNaN(slotNum) || slotNum <= 0) {
+                                          setConfirmModal({
+                                            isOpen: true,
+                                            title: "Invalid Slot",
+                                            message: "Please enter a valid positive number.",
+                                            icon: ShieldAlert,
+                                            confirmText: "OK",
+                                            color: "bg-slate-600",
+                                            hideCancel: true,
+                                            onConfirm: () => {}
+                                          });
+                                          return;
+                                        }
+                                        if (slotNum > maxSlots) {
+                                          setConfirmModal({
+                                            isOpen: true,
+                                            title: "Limit Exceeded",
+                                            message: `Slot ID S-${slotNum} exceeds the overall slots limit of ${maxSlots}.`,
+                                            icon: ShieldAlert,
+                                            confirmText: "OK",
+                                            color: "bg-slate-600",
+                                            hideCancel: true,
+                                            onConfirm: () => {}
+                                          });
+                                          return;
+                                        }
+
+                                        // Check duplicate slot across weeks
+                                        const allSlots = (performanceWeeks || []).flatMap(w => w.slot_ids || []);
+                                        if (allSlots.includes(slotNum)) {
+                                          const assignedWeek = performanceWeeks.find(w => (w.slot_ids || []).includes(slotNum));
+                                          setConfirmModal({
+                                            isOpen: true,
+                                            title: "Duplicate Slot",
+                                            message: `Slot S-${slotNum} is already assigned to ${assignedWeek?.date || 'another date'}.`,
+                                            icon: ShieldAlert,
+                                            confirmText: "OK",
+                                            color: "bg-slate-600",
+                                            hideCancel: true,
+                                            onConfirm: () => {}
+                                          });
+                                          return;
+                                        }
+
+                                        const newSlots = [...(week.slot_ids || []), slotNum].sort((a, b) => a - b);
+                                        try {
+                                          await updatePerformanceWeekSlots(week.id, newSlots);
+                                          setAddingSlotWeekId(null);
+                                          setNewSlotNumber('');
+                                          await fetchData();
+                                        } catch (err: any) {
+                                          console.error(err);
+                                        }
+                                      }}
+                                      className="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-all"
+                                      title="Save Slot"
+                                    >
+                                      <Check size={14} strokeWidth={3} />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setAddingSlotWeekId(null);
+                                        setNewSlotNumber('');
+                                      }}
+                                      className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-500 rounded-lg transition-all"
+                                      title="Cancel"
+                                    >
+                                      <X size={14} strokeWidth={3} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setAddingSlotWeekId(week.id);
+                                      setNewSlotNumber('');
+                                    }}
+                                    className="px-3 py-1.5 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-500 border border-indigo-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 inline-flex"
+                                  >
+                                    <Plus size={12} strokeWidth={3} /> Add Slot
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
@@ -5201,6 +5646,19 @@ function AdminView({ onLogout, setConfirmModal }: { onLogout: () => void, setCon
           positions={positions}
           loading={isSavingMember}
           setConfirmModal={setConfirmModal}
+        />
+
+        <AssignSlotModal
+          isOpen={isAssignModalOpen}
+          onClose={() => {
+            setIsAssignModalOpen(false);
+            setAssigningWaitlistEntry(null);
+          }}
+          onAssign={handleAssignWaitlistSlot}
+          entry={assigningWaitlistEntry}
+          registrations={registrations}
+          maxSlots={maxSlots}
+          loading={bulkActionLoading}
         />
       </div>
     </Layout >
@@ -5888,6 +6346,7 @@ function MemberPortalView({ member, onLogin, onLogout, onUpdate, setConfirmModal
               { id: 'dashboard', label: 'Dashboard', icon: Grid },
               { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
               { id: 'history', label: 'My History', icon: History },
+              { id: 'directory', label: 'Directory', icon: Users },
               isProvost && { id: 'attendance', label: 'Attendance', icon: CalendarCheck },
               { id: 'profile', label: 'Manage Profile', icon: Edit2 }
             ].filter(Boolean).map((item: any) => (
@@ -5961,6 +6420,7 @@ function MemberPortalView({ member, onLogin, onLogout, onUpdate, setConfirmModal
           )}
           {activeTab === 'leaderboard' && <VoicePartLeaderboard />}
           {activeTab === 'history' && <PortalHistory memberId={member.id} initialTab={historyInitialTab} />}
+          {activeTab === 'directory' && <PortalDirectory />}
           {isProvost && activeTab === 'attendance' && (
             <AttendanceManagement
               events={attendanceEvents}
@@ -6714,7 +7174,7 @@ function PortalProfileEditor({ member, onUpdate }: any) {
             <div>
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Phone Number</label>
               <div className="relative">
-                <PhoneIcon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Phone size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   value={form.phone || ''}
                   onChange={e => setForm({ ...form, phone: e.target.value })}
@@ -6896,5 +7356,159 @@ export default function App() {
         />
       </AnimatePresence>
     </BrowserRouter>
+  );
+}
+
+function PortalDirectory() {
+  const [members, setMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [activePart, setActivePart] = useState('All');
+
+  useEffect(() => {
+    getMembers().then(setMembers).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin text-indigo-500" size={32} /></div>;
+
+  const filteredMembers = members.filter(m => {
+    if (m.is_archived) return false;
+    const matchesSearch = m.full_name.toLowerCase().includes(search.toLowerCase());
+    const matchesPart = activePart === 'All' || m.voice_part === activePart;
+    return matchesSearch && matchesPart;
+  });
+
+  const parts = ['All', 'Soprano', 'Alto', 'Tenor', 'Bass', 'Instrumentalist'];
+
+  // Sorting: Music Director first, then Excos, then Part Leaders, then Alphabetical
+  const sortedMembers = [...filteredMembers].sort((a, b) => {
+    const aTitle = a.member_positions?.title || '';
+    const bTitle = b.member_positions?.title || '';
+    const aCat = a.member_positions?.category || 'General';
+    const bCat = b.member_positions?.category || 'General';
+    
+    // 1. Music Director always first
+    if (aTitle === 'Music Director' && bTitle !== 'Music Director') return -1;
+    if (aTitle !== 'Music Director' && bTitle === 'Music Director') return 1;
+
+    // 2. Excos next
+    if (aCat === 'Exco' && bCat !== 'Exco') return -1;
+    if (aCat !== 'Exco' && bCat === 'Exco') return 1;
+    
+    // 3. Part Leaders next
+    if (aCat === 'Part Leader' && bCat === 'General') return -1;
+    if (aCat === 'General' && bCat === 'Part Leader') return 1;
+    
+    return a.full_name.localeCompare(b.full_name);
+  });
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white uppercase italic tracking-tight">Choir Directory</h2>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest leading-none mt-1">Connect with your fellow members</p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-4 items-center">
+          <div className="relative w-full sm:w-64 group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={16} />
+            <input
+              type="text"
+              placeholder="Search members..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl pl-12 pr-4 py-3 text-xs font-bold focus:border-indigo-500 outline-none transition-all shadow-sm"
+            />
+          </div>
+          <div className="flex bg-slate-100 dark:bg-white/5 p-1 rounded-2xl overflow-x-auto max-w-full scrollbar-hide">
+            {parts.map(p => (
+              <button
+                key={p}
+                onClick={() => setActivePart(p)}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                  activePart === p ? "bg-white dark:bg-[#131521] text-indigo-600 shadow-md" : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                )}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {sortedMembers.map((m: any) => {
+          const isExco = m.member_positions?.category === 'Exco';
+          const isPartLeader = m.member_positions?.category === 'Part Leader';
+
+          return (
+            <motion.div
+              layout
+              key={m.id}
+              className={cn(
+                "group relative bg-white dark:bg-[#131521] rounded-[2.5rem] border overflow-hidden transition-all hover:shadow-2xl hover:-translate-y-1",
+                isExco 
+                  ? "border-indigo-500/30 shadow-indigo-500/5" 
+                  : "border-slate-200 dark:border-white/5 shadow-xl shadow-black/5"
+              )}
+            >
+              <div className="h-40 relative overflow-hidden">
+                <img 
+                  src={m.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(m.full_name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`} 
+                  alt={m.full_name} 
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                
+                <div className="absolute bottom-4 left-6 right-6 flex justify-between items-end">
+                  <div>
+                    <p className="text-[10px] text-white/70 font-black uppercase tracking-[0.2em]">{m.voice_part}</p>
+                    <h4 className="text-lg font-black text-white leading-tight mt-0.5">{m.full_name}</h4>
+                  </div>
+                </div>
+                
+                {(isExco || isPartLeader) && (
+                  <div className="absolute top-4 right-4 bg-white/10 backdrop-blur-md border border-white/20 text-white text-[8px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-2">
+                    <Shield size={10} className={cn(isExco ? "text-amber-400" : "text-indigo-400")} />
+                    {m.member_positions?.title}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="space-x-2">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Connect</span>
+                  <div className="flex gap-2 mt-2">
+                    {m.phone && (
+                      <a href={`tel:${m.phone}`} className="p-2 bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 rounded-xl hover:bg-indigo-500/10 hover:text-indigo-500 transition-all">
+                        <Phone size={14} />
+                      </a>
+                    )}
+                    {m.email && (
+                      <a href={`mailto:${m.email}`} className="p-2 bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 rounded-xl hover:bg-indigo-500/10 hover:text-indigo-500 transition-all">
+                        <Mail size={14} />
+                      </a>
+                    )}
+                    {m.instagram && (
+                      <a href={`https://instagram.com/${m.instagram.replace('@', '')}`} target="_blank" className="p-2 bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 rounded-xl hover:bg-indigo-500/10 hover:text-indigo-500 transition-all">
+                        <Instagram size={14} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {sortedMembers.length === 0 && (
+        <div className="flex flex-col items-center justify-center p-20 space-y-4 text-center">
+          <Users size={48} className="text-slate-200 dark:text-white/10" />
+          <p className="text-slate-500 font-black uppercase tracking-widest text-xs">No members found matching your search</p>
+        </div>
+      )}
+    </div>
   );
 }
